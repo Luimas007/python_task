@@ -44,8 +44,11 @@ def check_vector_store() -> bool:
     try:
         store = VectorStore()
         phones = PhoneService.list_phones()
-        if store.collection.count() == 0 and phones:
-            logger.info("Vector index is empty - building it")
+        if store.collection.count() != len(phones) and phones:
+            logger.info(
+                f"Vector index out of sync ({store.collection.count()} indexed vs "
+                f"{len(phones)} in DB) - rebuilding"
+            )
             store.rebuild(phones)
         else:
             logger.info(f"Vector index OK ({store.collection.count()} entries)")
