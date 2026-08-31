@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Samsung Phone Assistant</title>
+<style>
+  :root { --bg:#0f1115; --panel:#171a21; --border:#2a2e38; --accent:#4f8cff; --text:#e6e8ec; --muted:#8a8f9c; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--text); }
+  header { padding:16px 24px; border-bottom:1px solid var(--border); }
+  header h1 { margin:0; font-size:18px; }
+  .tabs { display:flex; gap:8px; padding:12px 24px 0; }
+  .tab-btn { background:none; border:none; color:var(--muted); padding:8px 14px; cursor:pointer; font-size:14px; border-bottom:2px solid transparent; }
+  .tab-btn.active { color:var(--text); border-color:var(--accent); }
+  .panel { display:none; padding:20px 24px; max-width:800px; margin:0 auto; }
+  .panel.active { display:block; }
+
+  #chat-log { display:flex; flex-direction:column; gap:10px; margin-bottom:14px; min-height:300px; }
+  .msg { padding:10px 14px; border-radius:10px; max-width:80%; white-space:pre-wrap; line-height:1.4; }
+  .msg.user { align-self:flex-end; background:var(--accent); color:#fff; }
+  .msg.assistant { align-self:flex-start; background:var(--panel); border:1px solid var(--border); }
+  .msg.meta { font-size:12px; color:var(--muted); margin-top:4px; }
+
+  .chat-input-row { display:flex; gap:8px; }
+  input[type=text] { flex:1; padding:10px 12px; background:var(--panel); border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:14px; }
+  button { padding:10px 16px; border-radius:8px; border:1px solid var(--border); background:var(--accent); color:#fff; cursor:pointer; font-size:14px; }
+  button.secondary { background:var(--panel); color:var(--text); }
+  button:disabled { opacity:0.5; cursor:not-allowed; }
+
+  select { width:100%; padding:10px; background:var(--panel); border:1px solid var(--border); border-radius:8px; color:var(--text); margin-bottom:14px; }
+  pre { background:var(--panel); border:1px solid var(--border); padding:14px; border-radius:8px; white-space:pre-wrap; font-size:13px; }
+  .row { display:flex; gap:8px; margin-top:10px; }
+  .loading { color:var(--muted); font-size:13px; }
+</style>
+</head>
+<body>
+
+<header><h1>Samsung Galaxy Phone Assistant</h1></header>
+
+<div class="tabs">
+  <button class="tab-btn active" data-tab="chat">Chat</button>
+  <button class="tab-btn" data-tab="browse">Browse Phones</button>
+</div>
+
+<section id="chat" class="panel active">
+  <div id="chat-log"></div>
+  <div class="chat-input-row">
+    <input type="text" id="chat-input" placeholder="Ask about specs, reviews, or comparisons..." autocomplete="off">
+    <button id="chat-send">Send</button>
+  </div>
+</section>
+
+<section id="browse" class="panel">
+  <select id="phone-select"></select>
+  <pre id="phone-specs">Select a phone to view its specifications.</pre>
+  <div class="row">
+    <button id="gen-review">Generate review</button>
+    <button id="download-review" class="secondary" disabled>Download review</button>
+  </div>
+  <pre id="review-output" style="display:none;"></pre>
+</section>
+
+<script>
+const API = "/api";
+
+document.querySelectorAll(".tab-btn").forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
+    btn.classList.add("active");
+    document.getElementById(btn.dataset.tab).classList.add("active");
+  };
+});
+
+// ---- Chat ----
+const chatLog = document.getElementById("chat-log");
+const chatInput = document.getElementById("chat-input");
+const chatSend = document.getElementById("chat-send");
+
+function addMessage(text, role, meta) {
+  const div = document.createElement("div");
+  div.className = "msg " + role;
+  div.textContent = text;
+  chatLog.appendChild(div);
+  if (meta) {
+    const m = document.createElement("div");
+    m.className = "meta";
+    m.textContent = meta;
+    chatLog.appendChild(m);
+  }
+  chatLog.scrollTop = chatLog.scrollHeight;
+  return div;
+}
+
+async function sendChat() {
+  const query = chatInput.value.trim();
+  if (!query) return;
+  chatInput.value = "";
+  chatSend.disabled = true;
+  addMessage(query, "user");
+  const loadingEl = addMessage("Thinking...", "assistant");
+
+  try {
+    const resp = await fetch(`${API}/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query })
+    });
+    const data = await resp.json();
+    loadingEl.textContent = data.answer;
+    if (data.phones && data.phones.length) {
+      const meta = document.createElement("div");
+      meta.className = "meta";
+      meta.textContent = "Referenced: " + data.phones.join(", ");
+      chatLog.appendChild(meta);
+    }
+  } catch (e) {
+    loadingEl.textContent = "Request failed. Is the API running?";
+  } finally {
+    chatSend.disabled = false;
+    chatInput.focus();
+  }
+}
+
+chatSend.onclick = sendChat;
+chatInput.addEventListener("keydown", e => { if (e.key === "Enter") sendChat(); });
+
+// ---- Browse ----
+const phoneSelect = document.getElementById("phone-select");
+const phoneSpecs = document.getElementById("phone-specs");
+const genReviewBtn = document.getElementById("gen-review");
+const downloadBtn = document.getElementById("download-review");
+const reviewOutput = document.getElementById("review-output");
+let phones = [];
+let currentReview = "";
+
+async function loadPhones() {
+  const resp = await fetch(`${API}/phones`);
+  phones = await resp.json();
+  phoneSelect.innerHTML = phones.map(p => `<option value="${p.id}">${p.name}</option>`).join("");
+  if (phones.length) showSpecs(phones[0].id);
+}
+
+function showSpecs(id) {
+  const phone = phones.find(p => p.id == id);
+  phoneSpecs.textContent = JSON.stringify(phone.specification, null, 2);
+  reviewOutput.style.display = "none";
+  downloadBtn.disabled = true;
+}
+
+phoneSelect.onchange = () => showSpecs(phoneSelect.value);
+
+genReviewBtn.onclick = async () => {
+  genReviewBtn.disabled = true;
+  reviewOutput.style.display = "block";
+  reviewOutput.textContent = "Generating...";
+  try {
+    const resp = await fetch(`${API}/phones/${phoneSelect.value}/review`, { method: "POST" });
+    const data = await resp.json();
+    currentReview = data.review;
+    reviewOutput.textContent = currentReview;
+    downloadBtn.disabled = false;
+  } catch (e) {
+    reviewOutput.textContent = "Failed to generate review.";
+  } finally {
+    genReviewBtn.disabled = false;
+  }
+};
+
+downloadBtn.onclick = () => {
+  const blob = new Blob([currentReview], { type: "text/plain" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  const name = phones.find(p => p.id == phoneSelect.value).name;
+  a.download = `${name.replace(/\s+/g, "_")}_review.txt`;
+  a.click();
+};
+
+loadPhones();
+</script>
+</body>
+</html>

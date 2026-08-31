@@ -1,0 +1,67 @@
+Task Description: Samsung Phone Query and Review System
+You are part of a development team at a tech company tasked with creating an intelligent
+system that allows users to easily gather detailed information, ask questions, and read reviews
+about Samsung smartphones. The system will leverage web scraping, chatbot interaction, multiagent systems, and API integration. Here's what needs to be done:
+
+1. Scrape Samsung Phone Data:
+
+Objective: Collect detailed speciﬁcations and features for 10-15 Samsung phones (e.g.,
+Galaxy S21, S22, S23, etc.) from GSMArena by web scraping. (BeautifulSoup, Scrapy,
+Selenium)
+Details: Your scraper should capture key phone speciﬁcations like display size, camera
+specs, battery life, processor, and other features.
+Database: Store the scraped data in a structured database (e.g., PostgreSQL or MySQL)
+to make it easily accessible for later retrieval.
+
+2. Build a Conversational Chatbot Using LLM:
+
+Objective: Develop a chatbot (use open source models, RAG) that can answer a wide
+range of questions about Samsung phones, including their speciﬁcations, features,
+pricing, and comparisons.
+Sample Queries:
+ "What are the camera specs of the Samsung Galaxy S23?"
+ "Which Samsung phone has the best battery life?"
+ "How does the Galaxy S23 compare to the S22 in terms of performance?"
+
+3. Implement a Multi-Agent System:
+
+Objective: Develop a multi-agent system (CrewAi, AutoGen, LangChain) where different
+agents specialize in fetching speciﬁc types of data and generating reviews.
+ One agent retrieves detailed phone speciﬁcations from the database.
+ An agent generates a detailed product review by combining the speciﬁcations.
+
+4. API Integration for Query Handling:
+
+Objective: Create an API (FastAPI, Flask) that allows users to interact with the system,
+asking questions about Samsung phones and receiving accurate responses.
+
+Execution Plan
+1. Step 1: Scrape Data and Store It
+ Begin by scraping data from GSMArena using BeautifulSoup or Scrapy. Focus on
+10-15 popular Samsung models.
+ Create a PostgreSQL database to store the scraped data in an organized manner
+(i.e., tables for phones, speciﬁcations, prices, etc.).
+2. Step 2: Build the Chatbot
+ Integrate OpenAI or Open source models (Hugging Face) for the chatbot. The
+chatbot should be able to answer questions like "What is the screen size of the
+Galaxy S22?"
+ Connect the chatbot to your database, enabling it to dynamically fetch phone
+speciﬁcations using RAG based on user input.
+3. Step 3: Implement Multi-Agent System
+ Build a multi-agent system where one agent retrieves the technical data, another
+generates comprehensive reviews.
+4. Step 4: Develop the API
+ Create a FastAPI or Flask API with endpoints that accept user queries in and
+return responses.
+
+Assessment Criteria
+
+Data Scraping: Accuracy, completeness, and structure of the scraped data stored in the
+database.
+Chatbot: Effective handling of diverse user queries, with relevant and accurate
+responses.
+Multi-Agent System: The effectiveness of agents working together to provide detailed
+and dynamic product reviews.
+API Integration: Seamless interaction with the API, handling multiple queries and
+providing accurate responses.
+
