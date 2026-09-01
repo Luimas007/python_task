@@ -16,7 +16,7 @@ def require_db():
         pytest.skip(f"PostgreSQL unavailable: {health.get('error')}")
     row = engine.fetch_one("SELECT count(*) AS n FROM phones", audit=False)
     if not row or row["n"] == 0:
-        pytest.skip("database is empty; run scripts.ingest first")
+        pytest.skip("database is empty; run python -m scripts.refresh")
 
 
 # --------------------------------------------------------------- structure
@@ -118,24 +118,44 @@ def test_no_duplicate_devices():
 
 
 # -------------------------------------------------------------- resolution
-@pytest.mark.parametrize("mention,expect_contains", [
-    ("Galaxy S23", "S23"),
-    ("S23 Ultra", "S23 Ultra"),
-    ("Z Fold8", "Z Fold8"),
-    ("Galaxy A56", "A56"),
-])
-def test_resolution_picks_the_right_device(mention, expect_contains):
-    row = repo.resolve_phone(mention)
-    if row is None:
-        pytest.skip(f"{mention} not in this corpus")
-    assert expect_contains in row["model_name"]
+@pytest.fixture(scope="module")
+def loaded():
+    """Model names actually in the knowledge base right now."""
+    return [r["model_name"] for r in repo.list_phones()]
 
 
-def test_base_model_does_not_match_ultra():
-    base = repo.resolve_phone("Galaxy S23")
-    if base is None:
-        pytest.skip("S23 not in corpus")
-    assert "Ultra" not in base["model_name"], "base model resolved to the Ultra variant"
+def test_every_loaded_phone_resolves_from_its_own_name(loaded):
+    for name in loaded:
+        row = repo.resolve_phone(name)
+        assert row is not None, f"{name} does not resolve to itself"
+        assert row["model_name"] == name
+
+
+def test_short_name_resolves(loaded):
+    """'Galaxy S25 Ultra' must find 'Samsung Galaxy S25 Ultra'."""
+    for name in loaded:
+        short = name.replace("Samsung ", "")
+        row = repo.resolve_phone(short)
+        assert row is not None, f"{short!r} did not resolve"
+        assert row["model_name"] == name
+
+
+def test_base_model_does_not_match_a_variant(loaded):
+    """The tightest fit wins: 'S25' must not be captured by 'S25 Ultra'."""
+    pairs = [
+        (base, variant)
+        for base in loaded
+        for variant in loaded
+        if variant != base and variant.startswith(base + " ")
+    ]
+    if not pairs:
+        pytest.skip("corpus holds no base/variant pair")
+    for base, variant in pairs:
+        row = repo.resolve_phone(base.replace("Samsung ", ""))
+        assert row is not None and row["model_name"] == base, (
+            f"{base!r} resolved to {row and row['model_name']!r}, "
+            f"expected the base model rather than {variant!r}"
+        )
 
 
 def test_unknown_device_resolves_to_nothing():
@@ -145,12 +165,21 @@ def test_unknown_device_resolves_to_nothing():
     assert unresolved
 
 
-def test_multiple_mentions_resolve_in_order():
-    matched, _ = repo.resolve_phones("Compare the Galaxy S23 with the S22")
-    if len(matched) < 2:
-        pytest.skip("corpus lacks both devices")
-    assert "S23" in matched[0]["model_name"]
-    assert "S22" in matched[1]["model_name"]
+def test_multiple_mentions_resolve_in_order(loaded):
+    if len(loaded) < 2:
+        pytest.skip("need two phones")
+    a, b = loaded[0], loaded[1]
+    matched, _ = repo.resolve_phones(f"Compare the {a} with the {b}")
+    assert [m["model_name"] for m in matched] == [a, b]
+
+
+def test_display_names_reads_well(loaded):
+    ids = [r["phone_id"] for r in repo.list_phones()][:2]
+    if len(ids) < 2:
+        pytest.skip("need two phones")
+    text = repo.display_names(ids)
+    assert " and " in text
+    assert repo.display_names([]) == ""
 
 
 # ----------------------------------------------------------------- ranking
@@ -179,7 +208,8 @@ def test_rank_rejects_arbitrary_columns():
 def test_vector_search_returns_relevant_chunks():
     from backend.rag import retriever
 
-    hits = retriever.search("battery capacity of the Galaxy S23", top_k=5)
+    name = repo.list_phones()[0]["model_name"]
+    hits = retriever.search(f"battery capacity of the {name}", top_k=5)
     assert hits, "no chunks retrieved"
     assert all(0.0 <= h.score <= 1.0 for h in hits)
     assert hits == sorted(hits, key=lambda h: h.score, reverse=True)
@@ -188,9 +218,7 @@ def test_vector_search_returns_relevant_chunks():
 def test_vector_search_can_filter_by_phone():
     from backend.rag import retriever
 
-    target = repo.resolve_phone("Galaxy S23")
-    if not target:
-        pytest.skip("S23 not in corpus")
+    target = repo.list_phones()[0]
     hits = retriever.search("camera", top_k=5, phone_ids=[target["phone_id"]])
     assert hits
     assert {h.phone_id for h in hits} == {target["phone_id"]}

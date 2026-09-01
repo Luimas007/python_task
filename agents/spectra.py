@@ -47,6 +47,14 @@ class SpectraAgent(Agent):
         uses_llm=False,
     )
 
+
+    def activity(self, msg: Envelope, ctx: AgentContext) -> str:
+        names = repo.display_names(msg.payload.get("phone_ids") or [])
+        focus = msg.payload.get("focus")
+        what = f"{focus} specifications" if focus else "the full specification sheet"
+        return (f"Fetching {what} for {names} from PostgreSQL" if names
+                else f"Fetching {what} from PostgreSQL")
+
     def handle(self, msg: Envelope, ctx: AgentContext) -> Envelope:
         phone_ids: list[int] = msg.payload.get("phone_ids") or []
         focus: str | None = msg.payload.get("focus")

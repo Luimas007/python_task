@@ -19,7 +19,7 @@ class Protocol:
 PG_WIRE = Protocol(
     id="PG-WIRE/3.0",
     label="PostgreSQL Frontend/Backend Protocol v3.0",
-    transport="TCP 5432 (psycopg2 / SQLAlchemy Core)",
+    transport="TCP 5432 (psycopg2 connection pool)",
     description="Every knowledge lookup. Parameterised SQL only; no external calls.",
 )
 

@@ -1,0 +1,261 @@
+{
+  "info": {
+    "name": "Samsung Phone Assistant",
+    "description": "Every endpoint of the multi-agent Samsung phone advisory service.\n\nThe API is unauthenticated and binds to 127.0.0.1 by default. Start it with `python app.py`, then run any request below.\n\nThe `base_url` collection variable points at http://127.0.0.1:8000 — change it once if you serve on a different port.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://127.0.0.1:8000",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Ask",
+      "description": "The multi-agent question endpoint.",
+      "item": [
+        {
+          "name": "Ask - specification lookup",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/ask", "host": ["{{base_url}}"], "path": ["api", "ask"] },
+            "body": {
+              "mode": "raw",
+              "options": { "raw": { "language": "json" } },
+              "raw": "{\n  \"question\": \"What are the camera specs of the Galaxy S25 Ultra?\",\n  \"session_key\": \"postman-demo\"\n}"
+            },
+            "description": "Pipeline: ATLAS -> SPECTRA -> ORACLE -> NEXUS -> SENTINEL.\nLook at `agents_used` and `grounding` in the response."
+          }
+        },
+        {
+          "name": "Ask - comparison",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/ask", "host": ["{{base_url}}"], "path": ["api", "ask"] },
+            "body": {
+              "mode": "raw",
+              "options": { "raw": { "language": "json" } },
+              "raw": "{\n  \"question\": \"How does the Galaxy S25 Ultra compare to the S24 Ultra?\",\n  \"session_key\": \"postman-demo\"\n}"
+            },
+            "description": "Pipeline: ATLAS -> SPECTRA -> VERSUS -> SENTINEL.\n`extras.deltas` holds every numeric difference, computed in Python rather than by the model."
+          }
+        },
+        {
+          "name": "Ask - ranking",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/ask", "host": ["{{base_url}}"], "path": ["api", "ask"] },
+            "body": {
+              "mode": "raw",
+              "options": { "raw": { "language": "json" } },
+              "raw": "{\n  \"question\": \"Which Samsung phone has the best battery life?\",\n  \"session_key\": \"postman-demo\"\n}"
+            },
+            "description": "Pipeline: ATLAS -> RANKER -> NEXUS -> SENTINEL.\nSuperlatives are answered with SQL aggregation, not semantic search.\n`extras.ranking.excluded_null_count` reports phones left out because the source never published the value."
+          }
+        },
+        {
+          "name": "Ask - review",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/ask", "host": ["{{base_url}}"], "path": ["api", "ask"] },
+            "body": {
+              "mode": "raw",
+              "options": { "raw": { "language": "json" } },
+              "raw": "{\n  \"question\": \"Write a review of the Galaxy S25 Ultra\",\n  \"session_key\": \"postman-demo\"\n}"
+            },
+            "description": "Pipeline: ATLAS -> SPECTRA -> CRITIC -> SENTINEL."
+          }
+        },
+        {
+          "name": "Ask - phone not in the database",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/ask", "host": ["{{base_url}}"], "path": ["api", "ask"] },
+            "body": {
+              "mode": "raw",
+              "options": { "raw": { "language": "json" } },
+              "raw": "{\n  \"question\": \"What is the battery capacity of the Galaxy S99 Omega?\"\n}"
+            },
+            "description": "Demonstrates the no-external-knowledge rule: the model is never asked to fill the gap. `unresolved` names the device and the answer says it is not in the database."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Knowledge base",
+      "item": [
+        {
+          "name": "Get knowledge base status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/knowledge", "host": ["{{base_url}}"], "path": ["api", "knowledge"] },
+            "description": "Phone count, spec rows, NULL count, chunk count, and the list of loaded devices."
+          }
+        },
+        {
+          "name": "Refresh knowledge base (top 10)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/knowledge/refresh", "host": ["{{base_url}}"], "path": ["api", "knowledge", "refresh"] },
+            "body": {
+              "mode": "raw",
+              "options": { "raw": { "language": "json" } },
+              "raw": "{\n  \"limit\": 10,\n  \"replace\": true\n}"
+            },
+            "description": "Returns immediately. Watch progress on the WebSocket /ws/trace, or poll /api/knowledge/refresh/status.\n\nIf GSMArena denies access the pipeline stops requesting and finishes from the locally saved pages in data/pages/."
+          }
+        },
+        {
+          "name": "Refresh from local pages only",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/knowledge/refresh", "host": ["{{base_url}}"], "path": ["api", "knowledge", "refresh"] },
+            "body": {
+              "mode": "raw",
+              "options": { "raw": { "language": "json" } },
+              "raw": "{\n  \"limit\": 10,\n  \"offline\": true\n}"
+            },
+            "description": "Never touches the network. Useful for a fast, repeatable demo."
+          }
+        },
+        {
+          "name": "Refresh status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/knowledge/refresh/status", "host": ["{{base_url}}"], "path": ["api", "knowledge", "refresh", "status"] },
+            "description": "Polling fallback for clients that cannot hold a WebSocket open."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Catalogue",
+      "item": [
+        {
+          "name": "List phones",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/phones", "host": ["{{base_url}}"], "path": ["api", "phones"] }
+          }
+        },
+        {
+          "name": "Phone detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/phones/1", "host": ["{{base_url}}"], "path": ["api", "phones", "1"] },
+            "description": "Full spec sheet. Fields the source never published come back as null - never as 0 or an empty string."
+          }
+        },
+        {
+          "name": "Ranking - battery capacity",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/rankings?metric=battery_capacity_mah&limit=5",
+              "host": ["{{base_url}}"],
+              "path": ["api", "rankings"],
+              "query": [
+                { "key": "metric", "value": "battery_capacity_mah" },
+                { "key": "limit", "value": "5" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Ranking - rejected metric (400)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/rankings?metric=model_name",
+              "host": ["{{base_url}}"],
+              "path": ["api", "rankings"],
+              "query": [{ "key": "metric", "value": "model_name" }]
+            },
+            "description": "Only whitelisted numeric columns can be ranked, so a user query can never reach an arbitrary column."
+          }
+        },
+        {
+          "name": "Rankable metrics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/rankable", "host": ["{{base_url}}"], "path": ["api", "rankable"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "System",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/health", "host": ["{{base_url}}"], "path": ["api", "health"] },
+            "description": "Check this first when something is not working."
+          }
+        },
+        {
+          "name": "Agents",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/agents", "host": ["{{base_url}}"], "path": ["api", "agents"] },
+            "description": "The eight agents: name, role, capabilities, protocols, and whether each touches the database or the LLM."
+          }
+        },
+        {
+          "name": "Protocols",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/protocols", "host": ["{{base_url}}"], "path": ["api", "protocols"] }
+          }
+        },
+        {
+          "name": "Query log",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/query-log?limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "query-log"],
+              "query": [{ "key": "limit", "value": "20" }]
+            },
+            "description": "Every SQL statement the agents ran, with the issuing agent, row count and duration."
+          }
+        },
+        {
+          "name": "Conversation history",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/history?session_key=postman-demo",
+              "host": ["{{base_url}}"],
+              "path": ["api", "history"],
+              "query": [{ "key": "session_key", "value": "postman-demo" }]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

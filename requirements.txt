@@ -8,7 +8,6 @@ python-dotenv==1.0.1
 
 # ---- PostgreSQL --------------------------------------------------------
 psycopg2-binary==2.9.9
-SQLAlchemy==2.0.35
 
 # ---- Scraping ----------------------------------------------------------
 # curl_cffi impersonates a real Chrome TLS fingerprint; plain requests is

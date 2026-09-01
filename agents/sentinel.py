@@ -48,6 +48,10 @@ class SentinelAgent(Agent):
         uses_llm=False,
     )
 
+
+    def activity(self, msg: Envelope, ctx: AgentContext) -> str:
+        return "Checking every figure in the answer against the database"
+
     def handle(self, msg: Envelope, ctx: AgentContext) -> Envelope:
         answer: str = msg.payload.get("answer") or ""
         evidence: str = msg.payload.get("evidence") or ""

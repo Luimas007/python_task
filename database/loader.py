@@ -186,3 +186,16 @@ def attribute_null_stats() -> list[dict[str, Any]]:
         ),
         key=lambda d: d["present"],
     )
+
+
+def clear_corpus() -> None:
+    """Empty the knowledge tables, leaving conversations and audit history.
+
+    `phones` cascades to specifications, phone_attributes and knowledge_chunks,
+    so one statement is enough.
+    """
+    engine.execute(
+        "TRUNCATE phones RESTART IDENTITY CASCADE",
+        operation="TRUNCATE knowledge base",
+    )
+    log.info("knowledge base cleared")

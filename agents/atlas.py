@@ -12,6 +12,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from agents.prompts import ATLAS_CLASSIFY
 from agents.base import Agent, AgentCard, AgentContext, Envelope
 from backend.core.logging_setup import get_logger
 from database import repository as repo
@@ -61,10 +62,6 @@ ASC_RE = re.compile(r"\b(worst|lowest|smallest|shortest|least|cheapest|"
 DESC_RE = re.compile(r"\b(best|highest|biggest|largest|longest|most|"
                      r"fastest|heaviest|thickest|expensive)\b", re.IGNORECASE)
 
-CLASSIFY_SYSTEM = (
-    "You classify questions about Samsung phones. Reply with JSON only, no prose. "
-    'Schema: {"intent": one of ["spec_lookup","compare","ranking","review","general"]}'
-)
 
 
 class AtlasAgent(Agent):
@@ -84,6 +81,10 @@ class AtlasAgent(Agent):
         reads_database=True,
         uses_llm=True,
     )
+
+
+    def activity(self, msg: Envelope, ctx: AgentContext) -> str:
+        return "Reading your question and identifying which phones you mean"
 
     def handle(self, msg: Envelope, ctx: AgentContext) -> Envelope:
         question = msg.payload.get("question", ctx.question)
@@ -146,7 +147,7 @@ class AtlasAgent(Agent):
         try:
             data = client().generate_json(
                 f'Question: "{q}"\nReply with JSON only.',
-                system=CLASSIFY_SYSTEM,
+                system=ATLAS_CLASSIFY.text,
                 trace=ctx.trace,
                 agent=self.name,
                 purpose="intent classification",

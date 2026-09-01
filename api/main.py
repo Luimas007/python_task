@@ -19,7 +19,8 @@ from database import engine
 setup_logging()
 log = get_logger("api.main")
 
-FRONTEND = Path(__file__).resolve().parent.parent / "frontend" / "static"
+ROOT = Path(__file__).resolve().parent.parent
+FRONTEND = ROOT / "frontend" / "static"
 
 
 @asynccontextmanager
@@ -70,6 +71,22 @@ if FRONTEND.exists():
 @app.get("/", include_in_schema=False)
 async def console() -> FileResponse:
     return FileResponse(FRONTEND / "index.html")
+
+
+@app.get("/docs-ui", include_in_schema=False)
+async def api_docs() -> FileResponse:
+    """Human-readable API reference, linked from the assistant's header."""
+    return FileResponse(FRONTEND / "docs.html")
+
+
+@app.get("/docs/postman_collection.json", include_in_schema=False)
+async def postman_collection() -> FileResponse:
+    """Importable Postman collection covering every endpoint."""
+    return FileResponse(
+        ROOT / "docs" / "postman_collection.json",
+        media_type="application/json",
+        filename="samsung-phone-assistant.postman_collection.json",
+    )
 
 
 @app.get("/favicon.ico", include_in_schema=False)

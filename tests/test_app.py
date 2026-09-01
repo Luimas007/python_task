@@ -86,11 +86,16 @@ def test_saved_page_count_ignores_listing_pages():
     assert n == on_disk - listings
 
 
-def test_ensure_data_is_a_noop_when_populated():
+def test_ensure_data_is_a_noop_when_populated(monkeypatch):
     """A second start must not re-scrape, re-ingest or re-embed."""
     before = app.corpus_state()
     if before["phones"] == 0:
         pytest.skip("database empty; nothing to assert about idempotency")
+
+    def explode(**kw):
+        raise AssertionError("startup re-ran the pipeline on a populated database")
+
+    monkeypatch.setattr("scraper.pipeline.refresh", explode)
     after = app.ensure_data()
     assert after == before
 
@@ -101,11 +106,22 @@ def test_rebuild_never_touches_the_network(monkeypatch):
     monkeypatch.setattr(app, "corpus_state", lambda: {"phones": 0, "chunks": 0, "embedded": 0})
     monkeypatch.setattr(app, "saved_page_count", lambda: 0)
 
-    def explode(*a, **k):
-        raise AssertionError("--rebuild must not invoke the scraper")
-
-    monkeypatch.setattr("scripts.scrape_pages.main", explode)
-
     with pytest.raises(app.StartupError) as exc:
         app.ensure_data(force_rebuild=True)
     assert "no saved pages" in str(exc.value)
+
+
+def test_rebuild_runs_the_pipeline_offline(monkeypatch):
+    """When pages do exist, --rebuild must still stay off the network."""
+    monkeypatch.setattr(app, "corpus_state",
+                        lambda: {"phones": 3, "chunks": 9, "embedded": 9})
+    monkeypatch.setattr(app, "saved_page_count", lambda: 5)
+    seen = {}
+
+    def fake_refresh(**kw):
+        seen.update(kw)
+        yield {"phase": "done", "message": "ok", "offline": True}
+
+    monkeypatch.setattr("scraper.pipeline.refresh", fake_refresh)
+    app.ensure_data(force_rebuild=True)
+    assert seen["offline"] is True, "--rebuild reached for the network"

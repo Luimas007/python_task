@@ -15,6 +15,26 @@ class QueryRequest(BaseModel):
     )
 
 
+class RefreshRequest(BaseModel):
+    """Body for POST /api/knowledge/refresh. Every field is optional."""
+
+    limit: int | None = Field(
+        None, ge=1, le=100,
+        description="How many phones to load. Defaults to SCRAPE_DEMO_COUNT (10).",
+    )
+    replace: bool = Field(
+        True,
+        description="Replace the knowledge base with exactly these phones. "
+                    "Set false to add to what is already stored.",
+    )
+    offline: bool = Field(
+        False,
+        description="Skip the network entirely and rebuild from data/pages/. "
+                    "The pipeline also switches to this on its own the first "
+                    "time GSMArena denies access.",
+    )
+
+
 class Grounding(BaseModel):
     verdict: str
     numeric_claims: int

@@ -31,6 +31,10 @@ class OracleAgent(Agent):
         uses_llm=False,
     )
 
+
+    def activity(self, msg: Envelope, ctx: AgentContext) -> str:
+        return "Searching the knowledge base for related information"
+
     def handle(self, msg: Envelope, ctx: AgentContext) -> Envelope:
         query = msg.payload.get("query", ctx.question)
         phone_ids = msg.payload.get("phone_ids") or None

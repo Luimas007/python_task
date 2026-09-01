@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>API Documentation — Samsung Phone Assistant</title>
+<link rel="icon" href="/favicon.ico">
+<style>
+  :root{
+    --bg:#faf9f7; --surface:#fff; --sunk:#f4f2ef; --code:#2b2926;
+    --line:#e6e2dc; --txt:#22201d; --muted:#6f6a63; --faint:#9a948c;
+    --accent:#c96442; --ok:#3f8f5f; --get:#2f6fb5; --post:#3f8f5f; --ws:#8355b8;
+    --sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --mono:ui-monospace,"SF Mono","Cascadia Code",Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{--bg:#1f1e1c;--surface:#262523;--sunk:#2e2c29;--code:#15140f;
+          --line:#3a3835;--txt:#f0eee9;--muted:#a8a29a;--faint:#7d766e;
+          --accent:#d97757;--get:#6ea8e0;--post:#5fb47f;--ws:#b18ada}
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font:15px/1.7 var(--sans)}
+  a{color:var(--accent)}
+  .layout{display:grid;grid-template-columns:250px 1fr;min-height:100vh}
+  nav{border-right:1px solid var(--line);background:var(--surface);padding:20px 0;
+      position:sticky;top:0;height:100vh;overflow-y:auto}
+  nav .brand{padding:0 20px 16px;display:flex;align-items:center;gap:9px;
+      border-bottom:1px solid var(--line);margin-bottom:12px}
+  nav .brand .logo{width:24px;height:24px;border-radius:6px;background:var(--accent);
+      color:#fff;display:grid;place-items:center;font-weight:700;font-size:12px}
+  nav a{display:block;padding:6px 20px;color:var(--muted);text-decoration:none;font-size:13.5px}
+  nav a:hover{color:var(--accent);background:var(--sunk)}
+  nav .sec{padding:14px 20px 5px;font-size:10.5px;text-transform:uppercase;
+      letter-spacing:.7px;color:var(--faint);font-weight:600}
+  main{padding:34px 44px 90px;max-width:960px}
+  h1{font-size:29px;margin:0 0 6px;letter-spacing:-.5px}
+  h2{font-size:20px;margin:44px 0 12px;padding-bottom:7px;border-bottom:1px solid var(--line)}
+  h3{font-size:15px;margin:26px 0 8px;font-family:var(--mono)}
+  p{color:var(--txt)} .lead{color:var(--muted);font-size:15.5px;margin-bottom:22px}
+  code{font-family:var(--mono);font-size:12.8px;background:var(--sunk);
+       padding:1.5px 5px;border-radius:4px}
+  pre{background:var(--code);color:#e8e6e1;padding:14px 16px;border-radius:10px;
+      overflow-x:auto;font:12.6px/1.6 var(--mono);margin:10px 0}
+  pre code{background:transparent;padding:0;color:inherit;font-size:inherit}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.6px}
+  th,td{text-align:left;padding:8px 11px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--faint)}
+  td code{white-space:nowrap}
+  .ep{background:var(--surface);border:1px solid var(--line);border-radius:12px;
+      padding:16px 18px;margin:14px 0}
+  .ep-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .verb{font-family:var(--mono);font-size:11px;font-weight:700;padding:2.5px 9px;
+        border-radius:5px;color:#fff;letter-spacing:.5px}
+  .verb.GET{background:var(--get)} .verb.POST{background:var(--post)}
+  .verb.WS{background:var(--ws)}
+  .path{font-family:var(--mono);font-size:14px;font-weight:600}
+  .ep p{margin:8px 0 0;color:var(--muted);font-size:13.6px}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:12px}
+  .cols h4{margin:0 0 5px;font-size:11px;text-transform:uppercase;
+           letter-spacing:.6px;color:var(--faint)}
+  @media(max-width:920px){.layout{grid-template-columns:1fr}
+    nav{position:static;height:auto;border-right:0;border-bottom:1px solid var(--line)}
+    main{padding:24px 20px 60px}.cols{grid-template-columns:1fr}}
+  .step{display:flex;gap:13px;margin:16px 0}
+  .step .num{width:25px;height:25px;border-radius:50%;background:var(--accent);color:#fff;
+    display:grid;place-items:center;font-size:12.5px;font-weight:700;flex:none}
+  .step .body{flex:1;min-width:0}
+  .step .body b{display:block;margin-bottom:3px}
+  .note{background:var(--sunk);border-left:3px solid var(--accent);padding:11px 15px;
+        border-radius:0 8px 8px 0;margin:14px 0;font-size:13.8px}
+  .back{display:inline-flex;align-items:center;gap:6px;font-size:13px;
+        text-decoration:none;margin-bottom:18px}
+</style>
+</head>
+<body>
+<div class="layout">
+<nav>
+  <div class="brand"><span class="logo">S</span><b style="font-size:14px">API Reference</b></div>
+  <div class="sec">Overview</div>
+  <a href="#intro">Introduction</a>
+  <a href="#auth">Authentication</a>
+  <a href="#flow">How a request flows</a>
+  <div class="sec">Endpoints</div>
+  <a href="#ask">POST /api/ask</a>
+  <a href="#knowledge">GET /api/knowledge</a>
+  <a href="#refresh">POST /api/knowledge/refresh</a>
+  <a href="#phones">GET /api/phones</a>
+  <a href="#phone">GET /api/phones/{id}</a>
+  <a href="#rankings">GET /api/rankings</a>
+  <a href="#agents">GET /api/agents</a>
+  <a href="#protocols">GET /api/protocols</a>
+  <a href="#health">GET /api/health</a>
+  <a href="#history">GET /api/history</a>
+  <a href="#querylog">GET /api/query-log</a>
+  <a href="#ws">WS /ws/trace</a>
+  <div class="sec">Guides</div>
+  <a href="#postman">Using Postman</a>
+  <a href="#errors">Error responses</a>
+</nav>
+
+<main>
+  <a class="back" href="/">← Back to the assistant</a>
+  <h1 id="intro">API Reference</h1>
+  <p class="lead">
+    Every endpoint is served by the FastAPI application on
+    <code>http://127.0.0.1:8000</code>. All responses are JSON. The interactive
+    OpenAPI explorer is at <a href="/docs" target="_blank">/docs</a>.
+  </p>
+
+  <div class="note">
+    <b>The database is the only knowledge source.</b> No endpoint reaches the
+    public internet at query time. The single exception is
+    <code>POST /api/knowledge/refresh</code>, which is the build step that fills
+    the database in the first place — and even that falls back to the locally
+    saved pages the moment GSMArena denies access.
+  </div>
+
+  <h2 id="auth">Authentication</h2>
+  <p>
+    <b>None.</b> The service binds to <code>127.0.0.1</code> and is intended for
+    local use, so there are no API keys, tokens or session cookies. Every request
+    below works as-is. If you expose it beyond localhost, put a reverse proxy with
+    authentication in front of it — nothing in this codebase does that for you.
+  </p>
+  <p>The only header you ever need is <code>Content-Type: application/json</code>,
+     and only on <code>POST</code> requests.</p>
+
+  <h2 id="flow">How a request flows</h2>
+<pre><code>POST /api/ask
+   │
+   ▼
+NEXUS (orchestrator)  ── plans the run
+   │
+   ├─► ATLAS      reads the question, resolves phone names   ── SELECT phones
+   │
+   ├─► SPECTRA    fetches the specifications                 ── SELECT phone_attributes
+   │              ORACLE  semantic search                    ── cosine_similarity()
+   │              RANKER  league tables                       ── ORDER BY … LIMIT
+   │
+   ├─► VERSUS / CRITIC / NEXUS   write the answer            ── Ollama (localhost)
+   │
+   └─► SENTINEL   checks every figure against the evidence
+   │
+   ▼
+JSON response  { answer, intent, agents_used, grounding, trace }</code></pre>
+
+  <!-- ============================================================ ASK -->
+  <h2>Endpoints</h2>
+
+  <div class="ep" id="ask">
+    <div class="ep-head"><span class="verb POST">POST</span>
+      <span class="path">/api/ask</span></div>
+    <p>Ask a question. This is the endpoint the chat interface uses. It runs the
+       whole multi-agent pipeline and returns the answer plus the full trace.</p>
+
+    <h4 style="margin-top:14px">Request body</h4>
+    <table>
+      <tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr>
+      <tr><td><code>question</code></td><td>string</td><td>yes</td>
+          <td>2–2000 characters.</td></tr>
+      <tr><td><code>session_key</code></td><td>string</td><td>no</td>
+          <td>Groups turns into one stored conversation. Defaults to <code>anonymous</code>.</td></tr>
+    </table>
+
+    <div class="cols">
+      <div>
+        <h4>Example request</h4>
+<pre><code>curl -X POST http://127.0.0.1:8000/api/ask \
+  -H "Content-Type: application/json" \
+  -d '{
+        "question": "Which Samsung phone has the best battery life?",
+        "session_key": "demo"
+      }'</code></pre>
+      </div>
+      <div>
+        <h4>Example response (trimmed)</h4>
+<pre><code>{
+  "run_id": "a1b2c3d4e5f6",
+  "question": "Which Samsung phone has …",
+  "answer": "The Samsung Galaxy S26 Ultra has the
+             best battery life, at 16.4 hours.",
+  "intent": "ranking",
+  "agents_used": ["NEXUS","ATLAS","RANKER","SENTINEL"],
+  "pipeline":    ["ATLAS","RANKER","NEXUS","SENTINEL"],
+  "devices": [],
+  "unresolved": [],
+  "grounding": {
+    "verdict": "grounded",
+    "numeric_claims": 1,
+    "supported": 1,
+    "unsupported": [],
+    "support_ratio": 1.0
+  },
+  "latency_ms": 977.6,
+  "trace": [ … ]
+}</code></pre>
+      </div>
+    </div>
+
+    <h4 style="margin-top:14px">Response fields</h4>
+    <table>
+      <tr><th>Field</th><th>Meaning</th></tr>
+      <tr><td><code>intent</code></td><td>One of <code>spec_lookup</code>,
+          <code>compare</code>, <code>ranking</code>, <code>review</code>,
+          <code>general</code> — decided by ATLAS.</td></tr>
+      <tr><td><code>agents_used</code></td><td>Which agents actually ran.</td></tr>
+      <tr><td><code>devices</code></td><td>Phones resolved against the
+          <code>phones</code> table.</td></tr>
+      <tr><td><code>unresolved</code></td><td>Model names mentioned but
+          <b>not in the database</b>. The answer says so rather than inventing them.</td></tr>
+      <tr><td><code>grounding</code></td><td>SENTINEL's audit: how many numeric
+          claims in the answer were traced back to retrieved rows.</td></tr>
+      <tr><td><code>extras</code></td><td>Intent-specific payload — the ranking
+          table, comparison deltas, or review standings.</td></tr>
+      <tr><td><code>trace</code></td><td>Every agent message and database
+          round-trip for this run.</td></tr>
+    </table>
+  </div>
+
+  <!-- ====================================================== KNOWLEDGE -->
+  <div class="ep" id="knowledge">
+    <div class="ep-head"><span class="verb GET">GET</span>
+      <span class="path">/api/knowledge</span></div>
+    <p>What the knowledge base currently holds, and whether a refresh is running.</p>
+<pre><code>curl http://127.0.0.1:8000/api/knowledge</code></pre>
+<pre><code>{
+  "ready": true,
+  "running": false,
+  "stats": { "phones": 10, "spec_rows": 613, "spec_nulls": 38,
+             "chunks": 237, "embedded": 237 },
+  "phones": [ { "phone_id": 1, "model_name": "Samsung Galaxy S26 Ultra",
+                "series": "Galaxy S", "rank": 2 } ],
+  "default_limit": 10
+}</code></pre>
+  </div>
+
+  <div class="ep" id="refresh">
+    <div class="ep-head"><span class="verb POST">POST</span>
+      <span class="path">/api/knowledge/refresh</span></div>
+    <p>Scrape the most popular Samsung phones and rebuild the knowledge base.
+       Returns immediately; progress streams over <code>/ws/trace</code> as
+       <code>kb.*</code> events. Only one refresh may run at a time.</p>
+
+    <table>
+      <tr><th>Field</th><th>Type</th><th>Default</th><th>Description</th></tr>
+      <tr><td><code>limit</code></td><td>int 1–100</td><td>10</td>
+          <td>How many phones to load.</td></tr>
+      <tr><td><code>replace</code></td><td>bool</td><td>true</td>
+          <td>Replace the knowledge base rather than adding to it.</td></tr>
+      <tr><td><code>offline</code></td><td>bool</td><td>false</td>
+          <td>Skip the network and rebuild from <code>data/pages/</code>.</td></tr>
+    </table>
+
+<pre><code>curl -X POST http://127.0.0.1:8000/api/knowledge/refresh \
+  -H "Content-Type: application/json" \
+  -d '{"limit": 10}'
+
+{ "started": true, "limit": 10, "stream": "/ws/trace" }</code></pre>
+
+    <div class="note">
+      If GSMArena denies access (HTTP 429/403), the pipeline stops requesting
+      immediately and finishes from the locally saved pages. The same parser runs
+      either way, so the stored data is identical. Poll
+      <code>GET /api/knowledge/refresh/status</code> if you cannot hold a
+      WebSocket open.
+    </div>
+  </div>
+
+  <!-- ======================================================== PHONES -->
+  <div class="ep" id="phones">
+    <div class="ep-head"><span class="verb GET">GET</span>
+      <span class="path">/api/phones</span></div>
+    <p>Every phone in the knowledge base with its headline attributes.</p>
+<pre><code>curl http://127.0.0.1:8000/api/phones</code></pre>
+  </div>
+
+  <div class="ep" id="phone">
+    <div class="ep-head"><span class="verb GET">GET</span>
+      <span class="path">/api/phones/{phone_id}</span></div>
+    <p>The full specification sheet for one device: typed attributes plus every
+       verbatim spec row, grouped by category. Fields the source never published
+       come back as <code>null</code>.</p>
+<pre><code>curl http://127.0.0.1:8000/api/phones/1</code></pre>
+<pre><code>{
+  "phone": { "model_name": "Samsung Galaxy S26 Ultra",
+             "battery_capacity_mah": 5400,
+             "display_protection": null },
+  "specs_by_category": {
+    "Display": [ { "key": "Size",  "value": "6.9 inches, …" },
+                 { "key": "Protection", "value": null } ]
+  }
+}</code></pre>
+    <p><b>404</b> if no phone has that id.</p>
+  </div>
+
+  <div class="ep" id="rankings">
+    <div class="ep-head"><span class="verb GET">GET</span>
+      <span class="path">/api/rankings</span></div>
+    <p>League table over one whitelisted numeric attribute. Phones whose value is
+       NULL are excluded and counted, never guessed at.</p>
+    <table>
+      <tr><th>Query param</th><th>Type</th><th>Default</th><th>Description</th></tr>
+      <tr><td><code>metric</code></td><td>string</td><td><code>battery_endurance_hours</code></td>
+          <td>Must be one of <a href="/api/rankable" target="_blank">/api/rankable</a>.
+              Anything else returns <b>400</b>.</td></tr>
+      <tr><td><code>limit</code></td><td>int 1–30</td><td>10</td><td>Rows returned.</td></tr>
+    </table>
+<pre><code>curl "http://127.0.0.1:8000/api/rankings?metric=battery_capacity_mah&limit=5"</code></pre>
+<pre><code>{
+  "column": "battery_capacity_mah",
+  "label": "battery capacity",
+  "unit": "mAh",
+  "direction": "DESC",
+  "rows": [ { "model_name": "Samsung Galaxy S26 Ultra", "metric_value": 5400 } ],
+  "excluded_null_count": 0
+}</code></pre>
+  </div>
+
+  <div class="ep" id="agents">
+    <div class="ep-head"><span class="verb GET">GET</span>
+      <span class="path">/api/agents</span></div>
+    <p>The agent roster: name, role, capabilities, which protocols each speaks,
+       and whether it touches the database or the language model.</p>
+<pre><code>curl http://127.0.0.1:8000/api/agents</code></pre>
+  </div>
+
+  <div class="ep" id="protocols">
+    <div class="ep-head"><span class="verb GET">GET</span>
+      <span class="path">/api/protocols</span></div>
+    <p>The five transports the system labels in its trace:
+       <code>PG-WIRE/3.0</code>, <code>VEC-SQL/1.0</code>, <code>ACP/1.0</code>,
+       <code>OLLAMA-HTTP/1.1</code>, <code>WS-TRACE/1.0</code>.</p>
+  </div>
+
+  <div class="ep" id="health">
+    <div class="ep-head"><span class="verb GET">GET</span>
+      <span class="path">/api/health</span></div>
+    <p>Database, LLM, embedding model and corpus status. Use this first when
+       something is not working.</p>
+<pre><code>curl http://127.0.0.1:8000/api/health</code></pre>
+<pre><code>{
+  "status": "ok",
+  "database": { "ok": true, "endpoint": "localhost:5432/samsung_kb",
+                "protocol": "PG-WIRE/3.0" },
+  "llm":      { "ok": true, "model": "llama3.2:3b" },
+  "embedding":{ "model": "…/all-MiniLM-L6-v2", "dim": 384, "device": "cpu" },
+  "corpus":   { "phones": 10, "chunks": 237 }
+}</code></pre>
+    <p><code>status</code> is <code>degraded</code> when the LLM is unreachable —
+       the API still answers, returning database rows instead of prose.</p>
+  </div>
+
+  <div class="ep" id="history">
+    <div class="ep-head"><span class="verb GET">GET</span>
+      <span class="path">/api/history</span></div>
+    <p>Stored conversation for a session.
+       Params: <code>session_key</code> (default <code>anonymous</code>),
+       <code>limit</code> (default 40).</p>
+<pre><code>curl "http://127.0.0.1:8000/api/history?session_key=demo"</code></pre>
+  </div>
+
+  <div class="ep" id="querylog">
+    <div class="ep-head"><span class="verb GET">GET</span>
+      <span class="path">/api/query-log</span></div>
+    <p>The audit trail: every SQL statement the agents ran, with the agent that
+       issued it, row count and duration. Proof that answers came from the
+       database.</p>
+<pre><code>curl "http://127.0.0.1:8000/api/query-log?limit=20"</code></pre>
+  </div>
+
+  <div class="ep" id="ws">
+    <div class="ep-head"><span class="verb WS">WS</span>
+      <span class="path">/ws/trace</span></div>
+    <p>Live event stream. Two families:</p>
+    <table>
+      <tr><th>Event</th><th>When</th></tr>
+      <tr><td><code>agent.start</code> / <code>agent.end</code></td>
+          <td>An agent begins or finishes. Carries an <code>activity</code>
+              string — the sentence the chat shows.</td></tr>
+      <tr><td><code>acp.message</code></td><td>One agent hands off to another.</td></tr>
+      <tr><td><code>db.query</code></td><td>A SQL round-trip, with the statement and timing.</td></tr>
+      <tr><td><code>kb.*</code></td><td>Knowledge-base refresh progress.</td></tr>
+    </table>
+<pre><code>// browser console on http://127.0.0.1:8000
+const ws = new WebSocket("ws://127.0.0.1:8000/ws/trace");
+ws.onmessage = e => console.log(JSON.parse(e.data));</code></pre>
+  </div>
+
+  <!-- ======================================================= POSTMAN -->
+  <h2 id="postman">Using Postman</h2>
+  <p class="lead">Eight steps to run any endpoint above. The example uses
+     <code>POST /api/ask</code>, the one worth demonstrating.</p>
+
+  <div class="step"><div class="num">1</div><div class="body">
+    <b>Open Postman</b>
+    Launch the desktop app (or <a href="https://web.postman.co" target="_blank">web.postman.co</a>).
+    You can skip signing in — click <i>Skip and go to the app</i>.
+    Make sure the assistant is running: <code>python app.py</code>.
+  </div></div>
+
+  <div class="step"><div class="num">2</div><div class="body">
+    <b>Create a request</b>
+    Click <b>New → HTTP</b>, or press the <b>+</b> above the tab bar.
+    An untitled request opens with a method dropdown and a URL field.
+  </div></div>
+
+  <div class="step"><div class="num">3</div><div class="body">
+    <b>Select the HTTP method</b>
+    Open the dropdown on the left of the URL bar (it says <code>GET</code>) and
+    choose <b>POST</b>. Use <code>GET</code> for every read endpoint above —
+    those need no body at all.
+  </div></div>
+
+  <div class="step"><div class="num">4</div><div class="body">
+    <b>Enter the URL</b>
+<pre><code>http://127.0.0.1:8000/api/ask</code></pre>
+    Use <code>127.0.0.1</code> rather than <code>localhost</code>; on some Windows
+    setups <code>localhost</code> resolves to IPv6 first and the connection is refused.
+  </div></div>
+
+  <div class="step"><div class="num">5</div><div class="body">
+    <b>Add the header</b>
+    Open the <b>Headers</b> tab and add:
+    <table>
+      <tr><th>Key</th><th>Value</th></tr>
+      <tr><td><code>Content-Type</code></td><td><code>application/json</code></td></tr>
+    </table>
+    Postman usually adds this for you when you pick a JSON body in the next step —
+    check it is there. No authentication header is needed.
+  </div></div>
+
+  <div class="step"><div class="num">6</div><div class="body">
+    <b>Add the request body</b>
+    Open the <b>Body</b> tab, choose <b>raw</b>, and set the format dropdown on
+    the right to <b>JSON</b>. Paste:
+<pre><code>{
+  "question": "How does the Galaxy S25 Ultra compare to the S24 Ultra?",
+  "session_key": "postman-demo"
+}</code></pre>
+  </div></div>
+
+  <div class="step"><div class="num">7</div><div class="body">
+    <b>Send</b>
+    Click <b>Send</b>. The first question after startup takes a few seconds while
+    the language model loads; later ones return in about one second for lookups
+    and rankings, and five to ten for comparisons and reviews.
+  </div></div>
+
+  <div class="step"><div class="num">8</div><div class="body">
+    <b>Read the response</b>
+    The bottom pane shows the JSON, the status code and the elapsed time.
+    What to look at:
+    <table>
+      <tr><th>Field</th><th>What it tells you</th></tr>
+      <tr><td><code>answer</code></td><td>The prose reply.</td></tr>
+      <tr><td><code>agents_used</code></td><td>Which agents ran — the multi-agent
+          flow, in order.</td></tr>
+      <tr><td><code>grounding.verdict</code></td><td><code>grounded</code> means every
+          number in the answer was matched to a database row.</td></tr>
+      <tr><td><code>trace</code></td><td>Expand it to show the actual SQL each agent
+          issued. This is the proof the answer came from PostgreSQL.</td></tr>
+    </table>
+  </div></div>
+
+  <h3>More requests to try</h3>
+  <table>
+    <tr><th>Method</th><th>URL</th><th>Body</th></tr>
+    <tr><td><code>GET</code></td><td><code>http://127.0.0.1:8000/api/health</code></td><td>—</td></tr>
+    <tr><td><code>GET</code></td><td><code>http://127.0.0.1:8000/api/phones</code></td><td>—</td></tr>
+    <tr><td><code>GET</code></td><td><code>http://127.0.0.1:8000/api/rankings?metric=main_camera_mp&amp;limit=5</code></td><td>—</td></tr>
+    <tr><td><code>GET</code></td><td><code>http://127.0.0.1:8000/api/query-log?limit=20</code></td><td>—</td></tr>
+    <tr><td><code>POST</code></td><td><code>http://127.0.0.1:8000/api/knowledge/refresh</code></td>
+        <td><code>{"limit": 10}</code></td></tr>
+  </table>
+
+  <div class="note">
+    <b>Import everything at once.</b> Download
+    <a href="/docs/postman_collection.json" download>postman_collection.json</a>,
+    then in Postman click <b>Import</b> and drop the file in. Every endpoint above
+    arrives pre-filled with a working example.
+  </div>
+
+  <h2 id="errors">Error responses</h2>
+  <table>
+    <tr><th>Status</th><th>Meaning</th><th>Body</th></tr>
+    <tr><td><code>400</code></td><td>A parameter was valid JSON but not an allowed
+        value — e.g. a <code>metric</code> outside the whitelist.</td>
+        <td><code>{"detail": "metric must be one of: …"}</code></td></tr>
+    <tr><td><code>404</code></td><td>No phone with that id.</td>
+        <td><code>{"detail": "no phone with id 999"}</code></td></tr>
+    <tr><td><code>409</code></td><td>A knowledge-base refresh is already running.</td>
+        <td><code>{"detail": "a knowledge base refresh is already running"}</code></td></tr>
+    <tr><td><code>422</code></td><td>The body failed validation — missing
+        <code>question</code>, or it was empty.</td>
+        <td><code>{"detail": [ { "loc": ["body","question"], … } ]}</code></td></tr>
+  </table>
+  <p>There is no <code>401</code> or <code>403</code>: the API is unauthenticated
+     by design.</p>
+</main>
+</div>
+</body>
+</html>

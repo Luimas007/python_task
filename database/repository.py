@@ -355,3 +355,24 @@ def recent_queries(limit: int = 25) -> list[dict[str, Any]]:
         (limit,),
         audit=False,
     )
+
+
+def display_names(phone_ids: list[int]) -> str:
+    """Human-readable device list for the activity line shown in the chat.
+
+    Deliberately un-traced and cached-free: it is cosmetic, and a label lookup
+    should never add a protocol frame to the operator's trace.
+    """
+    if not phone_ids:
+        return ""
+    rows = engine.fetch_all(
+        """SELECT model_name FROM phones
+            WHERE phone_id = ANY(%s::int[])
+            ORDER BY array_position(%s::int[], phone_id)""",
+        (phone_ids, phone_ids),
+        audit=False,
+    )
+    names = [r["model_name"] for r in rows]
+    if len(names) <= 1:
+        return names[0] if names else ""
+    return " and ".join([", ".join(names[:-1]), names[-1]])

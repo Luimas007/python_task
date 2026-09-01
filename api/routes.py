@@ -3,13 +3,15 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
+import time
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
 from starlette.concurrency import run_in_threadpool
 
 from agents.nexus import orchestrator
-from api.schemas import QueryRequest
+from api.schemas import QueryRequest, RefreshRequest
 from backend.config.settings import settings
 from backend.core.events import BUS, RunTrace
 from backend.core.logging_setup import get_logger
@@ -173,6 +175,76 @@ async def history(session_key: str = Query("anonymous"), limit: int = 40) -> dic
         (session_key, limit),
     )
     return {"messages": _jsonsafe(list(reversed(rows)))}
+
+
+# ------------------------------------------------- knowledge base refresh --
+# One refresh at a time. A second request while one runs returns 409 rather
+# than letting two writers fight over the same tables.
+_refresh_lock = threading.Lock()
+_refresh_state: dict[str, Any] = {"running": False, "events": [], "started_at": None}
+
+
+@router.get("/api/knowledge")
+async def knowledge() -> dict[str, Any]:
+    """What the knowledge base currently holds."""
+    corpus = await run_in_threadpool(repo.corpus_stats)
+    phones = await run_in_threadpool(repo.list_phones)
+    return {
+        "ready": bool(corpus.get("phones")),
+        "running": _refresh_state["running"],
+        "stats": _jsonsafe(corpus),
+        "phones": [
+            {"phone_id": p["phone_id"], "model_name": p["model_name"],
+             "series": p["series"], "rank": p["popularity_rank"]}
+            for p in phones
+        ],
+        "default_limit": settings.scraper.demo_count,
+    }
+
+
+@router.post("/api/knowledge/refresh")
+async def knowledge_refresh(body: RefreshRequest | None = None) -> dict[str, Any]:
+    """Start a refresh. Progress streams over /ws/trace as `kb.*` events."""
+    body = body or RefreshRequest()
+    if not _refresh_lock.acquire(blocking=False):
+        raise HTTPException(409, "a knowledge base refresh is already running")
+
+    limit = body.limit or settings.scraper.demo_count
+    _refresh_state.update(running=True, events=[], started_at=time.time())
+
+    def worker() -> None:
+        from scraper import pipeline
+
+        trace = RunTrace()
+        try:
+            for event in pipeline.refresh(limit=limit, offline=body.offline,
+                                             replace=body.replace):
+                _refresh_state["events"].append(event)
+                trace.system(
+                    f"kb.{event['phase']}",
+                    event.get("message", event["phase"]),
+                    status="error" if event["phase"] == "error" else "ok",
+                    detail=event,
+                )
+        except Exception as exc:
+            log.exception("refresh failed")
+            trace.system("kb.error", f"refresh failed: {exc}", status="error",
+                         detail={"phase": "error", "message": str(exc)})
+        finally:
+            _refresh_state["running"] = False
+            _refresh_lock.release()
+
+    threading.Thread(target=worker, daemon=True, name="kb-refresh").start()
+    return {"started": True, "limit": limit, "stream": "/ws/trace"}
+
+
+@router.get("/api/knowledge/refresh/status")
+async def knowledge_refresh_status() -> dict[str, Any]:
+    """Poll fallback for clients that cannot hold a WebSocket open."""
+    return {
+        "running": _refresh_state["running"],
+        "events": _jsonsafe(_refresh_state["events"]),
+    }
 
 
 # ----------------------------------------------------------- trace feed ---

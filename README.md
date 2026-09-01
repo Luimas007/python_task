@@ -1,294 +1,125 @@
-# Samsung Phone Query and Review System
+<div align="center">
 
-A multi-agent advisory service for Samsung smartphones. Specifications are
-scraped from GSMArena into PostgreSQL, and **that database is the only knowledge
-the system may use at query time** — the language model runs locally, receives
-database rows as context, and performs no retrieval of its own.
+# Samsung Phone Query & Review System
 
-Eight named agents cooperate over a typed message protocol. A live operator
-console shows which agents are working, the messages they exchange, and every
-database round-trip as it happens.
+**A multi-agent chatbot that answers questions about Samsung phones —
+using nothing but a local PostgreSQL database it built itself.**
+
+Scrapes GSMArena · stores in PostgreSQL · retrieves with RAG ·
+reasons with eight named agents · checks its own answers
 
 ```bash
-python app.py          # scrapes and builds on first run, then serves on :8000
+python app.py
 ```
+
+</div>
 
 ---
 
 ## Contents
 
-- [What it does](#what-it-does)
-- [Architecture](#architecture)
-- [The agents](#the-agents)
-- [Protocols](#protocols)
-- [Data model](#data-model)
-- [How "no external knowledge" is enforced](#how-no-external-knowledge-is-enforced)
-- [The NULL policy](#the-null-policy)
-- [Phone selection](#phone-selection)
-- [Setup](#setup)
-- [Running it](#running-it)
-- [API](#api)
-- [Tests](#tests)
-- [Design notes and trade-offs](#design-notes-and-trade-offs)
-- [Known limitations](#known-limitations)
-
----
-
-## What it does
-
-Ask a question in the console and the system routes it to the right pipeline:
-
-| Question | Intent | Agents |
-|---|---|---|
-| "What are the camera specs of the Galaxy S23?" | `spec_lookup` | ATLAS → SPECTRA → ORACLE → NEXUS → SENTINEL |
-| "How does the Galaxy S23 compare to the S22?" | `compare` | ATLAS → SPECTRA → VERSUS → SENTINEL |
-| "Which Samsung phone has the best battery life?" | `ranking` | ATLAS → RANKER → NEXUS → SENTINEL |
-| "Write a review of the Galaxy Z Fold8" | `review` | ATLAS → SPECTRA → CRITIC → SENTINEL |
-| anything else | `general` | ATLAS → ORACLE → NEXUS → SENTINEL |
-
-Every answer carries a grounding verdict: how many of the figures it states were
-traced back to database rows.
-
----
-
-## Architecture
-
-```
-                    ┌──────────────────────────────────────────┐
-   GSMArena ──────► │  scraper/   fetch → parse → normalise     │   offline,
-   (one-time)       │  data/pages/*.html saved verbatim         │   run once
-                    └───────────────────┬──────────────────────┘
-                                        │
-                    ┌───────────────────▼──────────────────────┐
-                    │            PostgreSQL 18                  │
-                    │  phones · specifications ·                │
-                    │  phone_attributes · knowledge_chunks      │
-                    │  cosine_similarity()  ← vector search     │
-                    └───────────────────┬──────────────────────┘
-                                        │ PG-WIRE/3.0
-                    ┌───────────────────▼──────────────────────┐
-                    │  agents/  NEXUS orchestrates 7 specialists│
-                    │           exchanging ACP/1.0 envelopes    │
-                    └──────┬────────────────────────┬──────────┘
-                           │ OLLAMA-HTTP/1.1        │ WS-TRACE/1.0
-                    ┌──────▼───────┐        ┌───────▼──────────┐
-                    │ Ollama       │        │ FastAPI + console │
-                    │ llama3.2:3b  │        │ live agent view   │
-                    │ (local GPU)  │        └───────────────────┘
-                    └──────────────┘
-```
-
-Scraping is a **build step**, not part of the request path. Once the database is
-populated the system never touches the network again — the only outbound
-connection at query time is loopback to Ollama.
-
-### Layout
-
-```
-app.py                  single entry point: preflight, bring-up, serve
-config/settings.py      all tunables, sourced from .env
-core/
-  events.py             thread-safe trace bus (worker threads → WebSocket)
-  protocols.py          the named protocols surfaced in the console
-  logging_setup.py
-db/
-  schema.sql            tables, views, cosine_similarity()
-  engine.py             pooled psycopg2 access; traces + audits every query
-  repository.py         every read the agents may perform
-  loader.py             ingest-side upserts
-scraper/
-  catalog.py            popularity crawl + flagship-aware selection
-  fetcher.py            curl_cffi fetch, saves each page to data/pages/
-  parser.py             HTML → verbatim spec rows
-  normalizer.py         verbatim text → typed, NULL-honest attributes
-rag/
-  chunker.py            builds the corpus *from database rows*
-  embedder.py           MiniLM on CPU
-  indexer.py            writes chunks + embeddings back into PostgreSQL
-  retriever.py          hybrid dense + trigram search, executed in SQL
-agents/                 base.py + the eight agents
-llm/ollama_client.py    local inference, no tools
-api/                    FastAPI routes, schemas, WebSocket
-frontend/static/        the operator console (single page, no build step)
-scripts/                setup_db · scrape_pages · fill_missing · ingest ·
-                        build_index · run_pipeline · report
-tests/                  parsing · database · agents · api · app
-```
-
----
-
-## The agents
-
-| Agent | Role | Reads DB | Uses LLM | What it contributes |
-|---|---|:--:|:--:|---|
-| **NEXUS** | Orchestrator | – | yes | Plans the run, routes messages, synthesises the answer |
-| **ATLAS** | Query Analyst | yes | fallback | Classifies intent; resolves device names against `phones` |
-| **SPECTRA** | Specification Retrieval | yes | – | Pulls typed attributes + the verbatim spec sheet |
-| **ORACLE** | Semantic Retrieval | yes | – | Embeds the question, runs hybrid search in SQL |
-| **RANKER** | Comparative Analytics | yes | – | `ORDER BY` over whitelisted metrics for superlatives |
-| **VERSUS** | Comparison Analyst | yes | yes | Builds the matrix, computes deltas in code, narrates |
-| **CRITIC** | Review Writer | yes | yes | Positions a device against the catalogue, writes the review |
-| **SENTINEL** | Grounding Auditor | – | – | Checks every figure in the answer against retrieved evidence |
-
-Two deliberate splits:
-
-- **Retrieval agents never call the LLM.** SPECTRA, ORACLE, RANKER and SENTINEL
-  are fully deterministic, so the facts entering a prompt are reproducible.
-- **Arithmetic never goes through the model.** VERSUS computes every delta in
-  Python and hands the model finished numbers to narrate. A 3B model is not
-  reliable at subtraction, and a wrong number in a spec comparison is the most
-  damaging error the system could make.
-
----
-
-## Protocols
-
-The console labels every frame with the transport it actually travelled over.
-
-| Protocol | Transport | Carries |
-|---|---|---|
-| `PG-WIRE/3.0` | TCP 5432, psycopg2 | Every knowledge lookup. Parameterised SQL only |
-| `VEC-SQL/1.0` | PL/pgSQL over TCP 5432 | `cosine_similarity(real[], real[])` — vector search runs *inside* Postgres |
-| `ACP/1.0` | in-process envelopes | Typed request/response messages between agents |
-| `OLLAMA-HTTP/1.1` | HTTP 127.0.0.1:11434 | Local inference. Loopback only |
-| `WS-TRACE/1.0` | WebSocket `/ws/trace` | Live agent + protocol frames to the console |
-
-Every SQL statement is also written to a `query_log` table with its agent,
-row count and duration, so the traffic is auditable after the fact.
-
----
-
-## Data model
-
-| Table | Purpose |
+| | |
 |---|---|
-| `phones` | One row per device: identity, series, tier, popularity, provenance (source URL, local page path, SHA-256) |
-| `specifications` | Verbatim key/value capture of every spec row, plus an explicit NULL row for each canonical spec the page omitted |
-| `phone_attributes` | 70 typed columns projected from the verbatim text — every one nullable |
-| `knowledge_chunks` | RAG corpus generated *from* the tables above, with its 384-dim embedding stored alongside |
-| `query_log` | Audit trail of every database round-trip |
-| `conversations`, `messages` | Chat history with intent, agents used and grounding verdict |
-| `scrape_runs` | Provenance for each ingest |
+| **[Overview](#overview)** · [Features](#main-features) · [Quick start](#quick-start) | Get going in five minutes |
+| **[System architecture](#system-architecture)** · [Multi-agent](#multi-agent-architecture) · [Agents](#agent-responsibilities) | How it is built |
+| **[Scraping](#scraping-workflow)** · [Knowledge base](#knowledge-base-workflow) · [PostgreSQL](#postgresql-architecture) | Where the data comes from |
+| **[API](#api-architecture)** · [Frontend](#frontend-architecture) | The surfaces |
+| **[Example query](#example-query-workflow)** · [Agent communication](#agent-communication-flow) | Walkthroughs |
+| **[Folder structure](#project-folder-structure)** · [Install](#installation) · [Usage](#using-the-chat-interface) | Reference |
+| **[Postman](#testing-the-api-with-postman)** · [Troubleshooting](#troubleshooting) | Demo and repair |
 
-Views: `v_phone_overview` (flattened catalogue), `v_coverage` (per-device fill rate).
+---
 
-### Vector search without pgvector
+## Overview
 
-pgvector is not available on this PostgreSQL install, so similarity is a
-set-based SQL function:
+Ask *"How does the Galaxy S25 Ultra compare to the S24 Ultra?"* and eight agents
+cooperate to answer it: one works out what you asked, one pulls the
+specifications from PostgreSQL, one computes the differences, one writes the
+comparison, and one checks that every number in the reply actually came from the
+database.
 
-```sql
-CREATE FUNCTION cosine_similarity(a REAL[], b REAL[]) RETURNS DOUBLE PRECISION
-LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE AS $fn$
-    SELECT CASE WHEN s.na = 0 OR s.nb = 0 THEN 0::double precision
-                ELSE s.dot / (sqrt(s.na) * sqrt(s.nb)) END
-    FROM (SELECT sum(x.v::float8 * y.v::float8) AS dot,
-                 sum(x.v::float8 * x.v::float8) AS na,
-                 sum(y.v::float8 * y.v::float8) AS nb
-          FROM unnest(a) WITH ORDINALITY AS x(v, i)
-          JOIN unnest(b) WITH ORDINALITY AS y(v, i) USING (i)) s;
-$fn$;
+The rule the whole design serves:
+
+> **The PostgreSQL database is the only knowledge the system may use.**
+> The language model runs locally, receives database rows as context, and has no
+> tools, no browsing and no retrieval of its own.
+
+That is not just policy — the last agent in every run extracts each figure from
+the answer and matches it against the rows that were actually retrieved. An
+invented number has no matching row and gets flagged.
+
+### The demonstration in one picture
+
+```
+   Start the app                 python app.py
+        │
+        ▼
+   Refresh the knowledge base    click "Knowledge base" → "Refresh"
+        │
+        ▼
+   Scrape the top 10 phones      GSMArena popularity ranking
+        │                        (falls back to local pages if blocked)
+        ▼
+   Extract the information       verbatim specs + 70 typed attributes
+        │                        absent facts stored as NULL
+        ▼
+   Store in PostgreSQL           phones · specifications · phone_attributes
+        │
+        ▼
+   Knowledge base ready          + embeddings in knowledge_chunks
+        │
+        ▼
+   Ask a question                "compare the S25 Ultra and S24 Ultra"
+        │
+        ▼
+   Agents communicate            ATLAS → SPECTRA → VERSUS → SENTINEL
+        │
+        ▼
+   Agents query PostgreSQL       every fact comes from a row
+        │
+        ▼
+   LLM writes the answer         llama3.2:3b, local, no internet
+        │
+        ▼
+   Final answer                  + "17/17 figures verified"
 ```
 
-This keeps the knowledge base self-contained — no Chroma, no FAISS, no second
-store to fall out of sync. At this corpus size a full scan returns in ~200 ms.
-It is O(n) and would need pgvector with an HNSW index beyond roughly 10⁵ chunks.
-
-Retrieval fuses that dense score with a `pg_trgm` lexical score (0.75 / 0.25).
-The lexical pass is what rescues exact model names and part numbers, which a
-384-dim embedding blurs together — "S22" and "S23" are near-identical vectors.
-
 ---
 
-## How "no external knowledge" is enforced
-
-Four independent mechanisms, not one:
-
-1. **The corpus is generated from the database.** `rag/chunker.py` renders chunks
-   out of `phones` / `phone_attributes` / `specifications`. Retrieval physically
-   cannot surface a fact that is not already stored.
-2. **The LLM has no tools.** `llm/ollama_client.py` exposes `generate` only. No
-   function calling, no browsing, no network beyond loopback.
-3. **Every prompt is closed.** System prompts instruct the model to answer only
-   from the supplied context and to say so when the context is silent.
-4. **SENTINEL audits the output.** Every number in the answer is extracted and
-   matched against the evidence the retrieval agents actually pulled. Unmatched
-   figures are reported in the response and shown in the console.
-
-Point 4 is the one that matters: the first three are policy, this one is a check.
-A figure produced from the model's own weights has no matching source row and
-gets flagged.
-
----
-
-## The NULL policy
-
-If GSMArena does not publish a fact, it is stored as SQL `NULL`. Never `0`,
-never `""`, never `"N/A"`, and never a value inferred from a sibling device.
-
-This is enforced at four layers:
-
-- `parser.clean()` maps `""`, `-`, `N/A` and similar to `None`.
-- `_fill_absent_specs()` writes an **explicit NULL row** for every canonical spec
-  the page omitted, so absence is a recorded fact rather than a missing row.
-- Every extractor in `normalizer.py` returns `None` when its pattern does not match.
-- Tests assert no placeholder ever reaches the database
-  (`test_absent_facts_are_null_never_placeholder`).
-
-Downstream, NULL is handled rather than hidden:
-
-- `RANKER` excludes NULL rows from rankings **and reports how many it excluded**.
-- `VERSUS` marks a metric "not comparable" when either side is NULL.
-- `CRITIC` is handed a computed list of missing fields, so it cannot claim data
-  is absent when it is present, or vice versa.
-- `SPECTRA` renders absences as `NOT PUBLISHED (NULL in database)` in the prompt.
-
----
-
-## Phone selection
-
-The brief asked for 10–15 phones; this build stores **30**, chosen by algorithm
-rather than by hand.
-
-1. Crawl GSMArena's own popularity ranking (`samsung-phones-f-9-0-r1-p{1..3}`,
-   where `r1` is the popularity sort) — 150 products.
-2. Drop everything that is not a phone (tablets, watches, laptops, earbuds).
-3. Classify each device into series / generation / variant / tier.
-4. **Fill flagship quotas first**, so high-volume budget models cannot crowd out
-   the flagships: 6 × Galaxy S base, 6 × S Ultra, 2 × S Plus, 2 × S FE,
-   1 × S Edge, 3 × Z Fold, 2 × Z Flip, 2 × Note.
-5. Fill the remaining slots by raw popularity.
-
-The result covers **every Galaxy S generation from S21 to S26**, both foldable
-lines, the Note line, and the six most-viewed A-series devices. Because step 1
-reads the live ranking, re-running it tracks whatever is popular that week while
-the quotas keep flagship coverage stable.
-
----
-
-## Setup
-
-### Verified environment
-
-Built and tested against this machine:
+## Main features
 
 | | |
 |---|---|
-| OS | Windows 11 (26200) |
-| CPU / RAM | Intel i7-12650H, 20 threads / 16 GB |
-| GPU | RTX 3050 Laptop, 4 GB VRAM |
-| PostgreSQL | 18.6 on `localhost:5432` (no pgvector) |
-| Ollama | 0.33.2, `llama3.2:3b` |
-| Python | 3.10 (conda env `samsung_phone_system`) |
+| **Chat interface** | Clean, ChatGPT-style. Shows each agent working, in plain English |
+| **One-click knowledge base** | Scrape the top N Samsung phones live, with per-phone progress |
+| **Automatic fallback** | The first time GSMArena denies access, it switches to local pages and stops asking |
+| **Eight named agents** | Each in its own file, each with a documented job |
+| **Prompts in one place** | Every system prompt in `agents/prompts.py`, never buried in code |
+| **Grounding audit** | Every number in every answer is checked against retrieved rows |
+| **Honest NULLs** | Missing facts are `NULL` — never `0`, `""` or a guess |
+| **In-database vector search** | Cosine similarity as a SQL function; no external vector store |
+| **Full audit trail** | Every SQL statement logged with agent, row count and duration |
+| **API + docs + Postman** | REST API, a docs page in the app, and an importable collection |
+| **92 tests** | Parser, database, agents, API, scraper fallback and startup |
 
-Those specs drove three decisions: the LLM is a 3B model (q4 weights fit 4 GB
-VRAM with context to spare), embeddings run on **CPU** (the installed torch is a
-CPU build, and MiniLM embeds the whole corpus in ~11 s anyway), and vector search
-lives in SQL because pgvector is not installed.
+---
+
+## Quick start
+
+### Requirements
+
+| | |
+|---|---|
+| Python | 3.10+ |
+| PostgreSQL | 14+ running locally (pgvector **not** required) |
+| [Ollama](https://ollama.com) | for the local language model |
+| RAM / VRAM | 8 GB RAM; a 4 GB GPU is plenty |
 
 ### Install
 
 ```bash
+git clone <this-repo> && cd py_task
+
 conda create -n samsung_phone_system python=3.10 -y
 conda activate samsung_phone_system
 pip install -r requirements.txt
@@ -305,222 +136,781 @@ PG_USER=postgres
 PG_PASSWORD=your_password_here
 PG_DATABASE=samsung_kb
 OLLAMA_MODEL=llama3.2:3b
+SCRAPE_DEMO_COUNT=10
 ```
 
-The database is created for you; the role just needs `CREATEDB`.
+The database itself is created for you — the role just needs `CREATEDB`.
 
----
-
-## Running it
+### Run
 
 ```bash
 python app.py
 ```
 
-That is the whole thing. `app.py` runs preflight checks, brings the database up
-to a usable state if it is not already, starts the API, and opens the console at
-**http://127.0.0.1:8000**.
-
-It is self-bootstrapping and safe to re-run. On a first run against an empty
-database it creates the schema, scrapes GSMArena, loads the pages and builds the
-vector index (~6 minutes, most of it polite crawl delay). On every run after
-that it detects the work is already done and starts in a couple of seconds.
-
 ```
 [1/4] PostgreSQL       PostgreSQL 18.6, connected to localhost:5432/samsung_kb
 [2/4] local LLM        llama3.2:3b ready
-[3/4] knowledge base   30 phones, 700 chunks, 700 embedded
+[3/4] knowledge base   10 phones, 237 chunks, 237 embedded
 [4/4] embedding model  all-MiniLM-L6-v2 (384-dim, cpu)
 
-ready in 2.4s
+ready in 11.0s
   console   http://127.0.0.1:8000
-  API docs  http://127.0.0.1:8000/docs
-  trace     ws://127.0.0.1:8000/ws/trace
+  API docs  http://127.0.0.1:8000/docs-ui
 ```
 
-### Options
+A browser opens on the chat. If the knowledge base is empty it offers to fill it.
 
 | Flag | Effect |
 |---|---|
-| `--port N` / `--host H` | serve somewhere else |
-| `--scrape` | force a fresh crawl before starting |
-| `--rebuild` | re-ingest the saved pages and rebuild the index (never touches the network) |
-| `--reset` | drop every row and rebuild from the saved pages |
-| `--no-browser` | do not open a browser window |
-| `--check` | run the preflight checks and exit |
+| `--scrape` | Refresh the knowledge base before starting |
+| `--limit N` | How many phones to load (default 10) |
+| `--rebuild` | Rebuild from `data/pages/` — never touches the network |
+| `--reset` | Drop every row, then rebuild |
+| `--port N` / `--host H` | Serve elsewhere |
+| `--no-browser` | Do not open a window |
+| `--check` | Run preflight checks and exit |
 
-### If a dependency is down
+---
 
-`app.py` distinguishes fatal from degraded:
+## System architecture
 
-- **PostgreSQL unreachable** → startup fails with the endpoint it tried and what
-  to check. There is no knowledge base without it.
-- **Ollama unreachable** → warns and starts anyway. Retrieval, ranking and
-  comparison still run; answers come back as the computed database rows instead
-  of prose, and the console shows a `running without the LLM` note.
-
-### Running the steps individually
-
-`app.py` calls these; you can also run them yourself.
-
-```bash
-python -m scripts.setup_db       # create database, apply schema
-python -m scripts.scrape_pages   # select 30 phones, save pages to data/pages/
-python -m scripts.ingest         # parse saved pages → PostgreSQL
-python -m scripts.build_index    # generate chunks + embeddings
-python -m scripts.run_pipeline   # all four, with a verification pass
-python -m api.main               # serve without the bring-up logic
+```
+ ┌─────────────────────────────────────────────────────────────────────┐
+ │                          BUILD TIME (once)                          │
+ │                                                                     │
+ │   GSMArena ──► fetcher ──► parser ──► normalizer ──► PostgreSQL     │
+ │   popularity     │          verbatim    70 typed                    │
+ │   ranking        │          spec rows   attributes                  │
+ │                  ▼                                                  │
+ │            data/pages/*.html  ◄── fallback source when blocked      │
+ └─────────────────────────────────────────────────────────────────────┘
+                                    │
+ ┌──────────────────────────────────┼──────────────────────────────────┐
+ │                          QUERY TIME                                 │
+ │                                  ▼                                  │
+ │  ╔═══════════════════════════════════════════════════════════════╗  │
+ │  ║                  PostgreSQL   samsung_kb                      ║  │
+ │  ║   phones · specifications · phone_attributes                  ║  │
+ │  ║   knowledge_chunks (+ 384-dim embeddings)                     ║  │
+ │  ║   cosine_similarity()  ← vector search runs INSIDE the DB     ║  │
+ │  ╚═══════════════════════════════════════════════════════════════╝  │
+ │                    ▲                          ▲                     │
+ │                    │ PG-WIRE/3.0              │ VEC-SQL/1.0         │
+ │  ┌─────────────────┴──────────────────────────┴──────────────────┐  │
+ │  │  agents/    NEXUS orchestrates 7 specialists over ACP/1.0     │  │
+ │  └────────────┬───────────────────────────────┬─────────────────┘  │
+ │               │ OLLAMA-HTTP/1.1               │ WS-TRACE/1.0        │
+ │      ┌────────▼─────────┐          ┌──────────▼──────────┐          │
+ │      │  Ollama          │          │  FastAPI + chat UI  │          │
+ │      │  llama3.2:3b     │          │  live agent view    │          │
+ │      │  127.0.0.1 only  │          └─────────────────────┘          │
+ │      └──────────────────┘                                           │
+ └─────────────────────────────────────────────────────────────────────┘
 ```
 
-To see exactly what landed in the database — per-device spec coverage, the
-attribute fill rate across the catalogue, and a sample of the fields the source
-did not publish:
+Scraping is a **build step**, not part of answering. Once the database is
+populated the only outbound connection at query time is loopback to Ollama.
+
+### The five protocols
+
+Every frame in the trace is labelled with the transport it travelled over.
+
+| Protocol | Transport | Carries |
+|---|---|---|
+| `PG-WIRE/3.0` | TCP 5432, psycopg2 | Every knowledge lookup. Parameterised SQL only |
+| `VEC-SQL/1.0` | PL/pgSQL over TCP 5432 | `cosine_similarity(real[], real[])` inside Postgres |
+| `ACP/1.0` | in-process envelopes | Typed messages between agents |
+| `OLLAMA-HTTP/1.1` | HTTP 127.0.0.1:11434 | Local inference. Loopback only |
+| `WS-TRACE/1.0` | WebSocket `/ws/trace` | Live events to the browser |
+
+---
+
+## Multi-agent architecture
+
+```
+                        ┌──────────────────────────────┐
+   User question ─────► │  NEXUS      the orchestrator │
+                        └──────────────┬───────────────┘
+                                       │ ACP/1.0
+                                       ▼
+                        ┌──────────────────────────────┐
+                        │  ATLAS      what is asked?    │──► SELECT phones
+                        └──────────────┬───────────────┘
+                                       │ intent + phone_ids
+              ┌────────────────────────┼────────────────────────┐
+              ▼                        ▼                        ▼
+      ┌───────────────┐       ┌───────────────┐        ┌───────────────┐
+      │   SPECTRA     │       │    ORACLE     │        │    RANKER     │
+      │ spec sheets   │       │ vector search │        │ league tables │
+      └───────┬───────┘       └───────┬───────┘        └───────┬───────┘
+              │                       │                        │
+              ▼                       ▼                        ▼
+      ╔═══════════════════════════════════════════════════════════════╗
+      ║                    PostgreSQL  samsung_kb                     ║
+      ╚═══════════════════════════════════════════════════════════════╝
+              │                                                │
+              ▼                                                ▼
+      ┌───────────────┐  ┌───────────────┐          ┌───────────────┐
+      │    VERSUS     │  │    CRITIC     │          │     NEXUS     │
+      │  comparison   │  │    review     │          │  synthesis    │
+      └───────┬───────┘  └───────┬───────┘          └───────┬───────┘
+              └──────────────────┴──────────────────────────┘
+                                       │  draft answer
+                                       ▼
+                        ┌──────────────────────────────┐
+                        │  SENTINEL   every number ok?  │
+                        └──────────────┬───────────────┘
+                                       ▼
+                                 Final answer
+```
+
+### Agent responsibilities
+
+| Agent | Role | File | Reads DB | Uses LLM | Prompt |
+|---|---|---|:--:|:--:|---|
+| **NEXUS** | Orchestrator — plans the run, routes messages, writes the answer | [`agents/nexus.py`](agents/nexus.py) | – | yes | `NEXUS_SYNTHESIS` |
+| **ATLAS** | Query Analyst — classifies intent, resolves phone names | [`agents/atlas.py`](agents/atlas.py) | yes | fallback | `ATLAS_CLASSIFY` |
+| **SPECTRA** | Specification Retrieval — pulls spec sheets | [`agents/spectra.py`](agents/spectra.py) | yes | – | none |
+| **ORACLE** | Semantic Retrieval — hybrid vector search | [`agents/oracle.py`](agents/oracle.py) | yes | – | none |
+| **RANKER** | Comparative Analytics — superlatives via SQL | [`agents/ranker.py`](agents/ranker.py) | yes | – | none |
+| **VERSUS** | Comparison Analyst — computes deltas, narrates | [`agents/versus.py`](agents/versus.py) | yes | yes | `VERSUS_COMPARE` |
+| **CRITIC** | Review Writer — positions a device against the catalogue | [`agents/critic.py`](agents/critic.py) | yes | yes | `CRITIC_REVIEW` |
+| **SENTINEL** | Grounding Auditor — verifies every figure | [`agents/sentinel.py`](agents/sentinel.py) | – | – | none |
+
+> **Full detail per agent — input, output, SQL, prompt — in
+> [`docs/AGENTS.md`](docs/AGENTS.md).**
+
+Two deliberate splits:
+
+- **Retrieval agents never call the LLM.** SPECTRA, ORACLE, RANKER and SENTINEL
+  are fully deterministic, so the facts entering a prompt are reproducible — and
+  the audit cannot itself hallucinate.
+- **Arithmetic never goes through the model.** VERSUS computes every difference
+  in Python. A wrong number in a spec comparison is the worst error this system
+  could make.
+
+### Where the prompts live
+
+All four, in [`agents/prompts.py`](agents/prompts.py):
+
+```bash
+python -m agents.prompts            # print them all
+python -m agents.prompts VERSUS     # print one
+python -m agents.prompts SPECTRA    # → "deterministic, it has no prompt"
+```
+
+---
+
+## Scraping workflow
+
+```
+  1. DISCOVER      GET samsung-phones-f-9-0-r1-p{1,2,3}.php
+                   (`r1` = GSMArena's own popularity sort — 150 products)
+                        │
+                        ▼
+  2. FILTER        drop tablets, watches, laptops, earbuds
+                        │
+                        ▼
+  3. CLASSIFY      series · generation · variant · tier
+                   "Galaxy S25 Ultra" → Galaxy S, gen 25, Ultra, flagship
+                        │
+                        ▼
+  4. SELECT        flagship quotas first, then raw popularity
+                        │
+                        ▼
+  5. FETCH         save each page to data/pages/<slug>.html
+                        │
+                   ┌────┴────────────────────────────┐
+                   │  HTTP 429 / 403 ?               │
+                   │       └─► YES: stop asking.     │
+                   │           Use data/pages/.      │
+                   └────┬────────────────────────────┘
+                        ▼
+  6. PARSE         GSMArena tags every cell with `data-spec`
+                   → verbatim rows; absent codes recorded as NULL
+                        │
+                        ▼
+  7. NORMALIZE     70 typed columns; every extractor returns None
+                   when the text does not state the fact
+                        │
+                        ▼
+  8. STORE         UPSERT phones / specifications / phone_attributes
+```
+
+### Phone selection
+
+The brief asks for 10–15 phones; the selector handles any N and the demo loads
+**10**.
+
+1. Crawl GSMArena's popularity ranking — 150 products.
+2. Drop everything that is not a phone.
+3. Classify each into series / generation / variant / tier.
+4. **Fill flagship quotas first** so high-volume budget models cannot crowd out
+   the flagships: 6 × Galaxy S base, 6 × S Ultra, 2 × S+, 2 × S FE, 1 × S Edge,
+   3 × Z Fold, 2 × Z Flip, 2 × Note.
+5. Fill remaining slots by raw popularity.
+
+At `--limit 30` this covers **every Galaxy S generation from S21 to S26**, both
+foldable lines, the Note line, and the six most-viewed A-series devices. At
+`--limit 10` the quotas spend every slot on flagships — which is what you want
+in a demo.
+
+### When GSMArena says no
+
+GSMArena rate-limits by IP and, once it starts refusing, keeps refusing for a
+long while regardless of TLS fingerprint. **Retrying only extends the block.**
+
+So the first access denial (`429`, `403`, `401`, `503`) flips the fetcher into
+offline mode for the rest of the run:
+
+```
+  live fetch ──► HTTP 429 ──► ┌─────────────────────────────┐
+                              │  offline = True             │
+                              │  block_reason = "HTTP 429"  │
+                              │  no further requests sent   │
+                              └──────────┬──────────────────┘
+                                         ▼
+                              data/pages/<slug>.html
+                                         │
+                                         ▼
+                              same parser, same normalizer,
+                              same rows in PostgreSQL
+```
+
+The console says so plainly: *"GSMArena denied access, so the locally saved
+pages are being used instead. Same parser, same result."*
+
+This is covered by tests — including one asserting that a blocked origin is
+contacted exactly **once**.
+
+### The NULL policy
+
+If GSMArena does not publish a fact, it is stored as SQL `NULL`. Never `0`,
+never `""`, never `"N/A"`, never a value inferred from a sibling device.
+
+Enforced at four layers:
+
+- `parser.clean()` maps `""`, `-`, `N/A` to `None`.
+- `_fill_absent_specs()` writes an **explicit NULL row** for every canonical spec
+  the page omitted — absence is a recorded fact, not a missing row.
+- Every extractor in `normalizer.py` returns `None` when its pattern fails.
+- Tests assert no placeholder ever reaches the database.
+
+Downstream, NULL is handled rather than hidden:
+
+| Agent | Behaviour |
+|---|---|
+| RANKER | Excludes NULLs from rankings **and reports how many** |
+| VERSUS | Marks a metric "not comparable" when either side is NULL |
+| CRITIC | Is handed a computed list of missing fields, so it cannot misreport them |
+| SPECTRA | Renders absences as `NOT PUBLISHED (NULL in database)` |
+
+---
+
+## Knowledge base workflow
+
+```
+   ┌──────────────┐   POST /api/knowledge/refresh {"limit": 10}
+   │   Browser    │ ─────────────────────────────────────────────►
+   └──────┬───────┘                                          FastAPI
+          │                                                     │
+          │  WS /ws/trace                          background thread
+          │  ◄───── kb.discover ──────────────────────────────  │
+          │  ◄───── kb.catalogue  (top 10 selected) ──────────  │
+          │  ◄───── kb.cleared ───────────────────────────────  │
+          │  ◄───── kb.phone  S26 Ultra  scraping ────────────  │
+          │  ◄───── kb.phone  S26 Ultra  added ───────────────  │
+          │  ◄───── kb.phone  S26        scraping ────────────  │
+          │              ⋮                                      │
+          │  ◄───── kb.indexing ──────────────────────────────  │
+          │  ◄───── kb.done   "10 phones loaded" ─────────────  │
+          ▼
+   ✓ Samsung Galaxy S26 Ultra — added · 64 specs · 3 NULL
+   ✓ Samsung Galaxy S26      — added · 63 specs · 3 NULL
+   ⏳ Samsung Galaxy S25 Ultra — Scraping…
+```
+
+From the CLI:
+
+```bash
+python -m scripts.refresh                # top 10
+python -m scripts.refresh --limit 30     # the full catalogue
+python -m scripts.refresh --offline      # never touch the network
+python -m scripts.refresh --add          # add rather than replace
+```
+
+---
+
+## PostgreSQL architecture
+
+```
+                    ┌──────────────────────┐
+                    │       phones         │  identity, series, tier,
+                    │  ──────────────────  │  popularity, provenance
+                    │  phone_id  (PK)      │  (source URL, local path, SHA-256)
+                    └──────────┬───────────┘
+                               │ 1
+             ┌─────────────────┼─────────────────┐
+             │ N               │ 1               │ N
+  ┌──────────▼─────────┐  ┌────▼──────────┐  ┌───▼────────────────┐
+  │  specifications    │  │phone_attributes│  │ knowledge_chunks   │
+  │ ────────────────── │  │ ────────────── │  │ ────────────────── │
+  │ category           │  │ 70 typed cols  │  │ section, content   │
+  │ spec_key           │  │ every one      │  │ embedding REAL[384]│
+  │ spec_value  (NULL  │  │ nullable       │  │ ← generated FROM   │
+  │   = not published) │  │                │  │   the tables left  │
+  └────────────────────┘  └────────────────┘  └────────────────────┘
+
+  ┌────────────────┐  ┌──────────────┐  ┌──────────────────────────┐
+  │   query_log    │  │ conversations│  │      scrape_runs         │
+  │ every SQL stmt │  │  + messages  │  │  provenance per ingest   │
+  └────────────────┘  └──────────────┘  └──────────────────────────┘
+
+  views:  v_phone_overview (flattened)   v_coverage (fill rate per device)
+```
+
+### Vector search without pgvector
+
+pgvector is not installed on the target server, so similarity is a set-based SQL
+function:
+
+```sql
+CREATE FUNCTION cosine_similarity(a REAL[], b REAL[]) RETURNS DOUBLE PRECISION
+LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE AS $fn$
+    SELECT CASE WHEN s.na = 0 OR s.nb = 0 THEN 0::double precision
+                ELSE s.dot / (sqrt(s.na) * sqrt(s.nb)) END
+    FROM (SELECT sum(x.v::float8 * y.v::float8) AS dot,
+                 sum(x.v::float8 * x.v::float8) AS na,
+                 sum(y.v::float8 * y.v::float8) AS nb
+          FROM unnest(a) WITH ORDINALITY AS x(v, i)
+          JOIN unnest(b) WITH ORDINALITY AS y(v, i) USING (i)) s;
+$fn$;
+```
+
+The knowledge base stays self-contained — no Chroma, no FAISS, no second store
+to fall out of sync. At this corpus size a full scan returns in ~200 ms. It is
+O(n) and would need pgvector with an HNSW index beyond roughly 10⁵ chunks.
+
+Retrieval fuses that dense score with a `pg_trgm` lexical score (0.75 / 0.25).
+The lexical pass rescues exact model numbers, which a 384-dimension embedding
+blurs together.
+
+### How the "only PostgreSQL" rule is enforced
+
+Four mechanisms, only the last of which is a check rather than a policy:
+
+1. **The RAG corpus is generated from the database.** `rag/chunker.py` renders
+   chunks out of `phones` / `phone_attributes` / `specifications`. Retrieval
+   physically cannot surface a fact that is not stored.
+2. **The LLM has no tools.** `backend/llm/ollama_client.py` exposes `generate`
+   only. No function calling, no browsing, loopback network only.
+3. **Every prompt is closed** — answer from the context, say so when it is silent.
+4. **SENTINEL audits the output.** Every number in the answer is extracted and
+   matched against the evidence actually retrieved. Unmatched figures are
+   reported in the response and shown in the chat.
+
+---
+
+## API architecture
+
+```
+   Browser ──── POST /api/ask ────► FastAPI ──► run_in_threadpool
+                                       │              │
+                                       │              ▼
+                                       │      NexusAgent.answer()
+                                       │              │
+                                       │       agents ⇄ PostgreSQL
+                                       │       agents ⇄ Ollama
+                                       │              │
+                                       │◄─── result + trace
+                                       ▼
+   Browser ◄──── JSON  {answer, agents_used, grounding, trace}
+      ▲
+      └───── WS /ws/trace ◄── live agent + protocol events (during the run)
+```
+
+The agents run in a worker thread; the trace bus bridges them back to the
+asyncio loop so the browser sees each step as it happens.
+
+| Method | Path | Purpose |
+|---|---|---|
+| `POST` | `/api/ask` | Ask a question |
+| `GET` | `/api/knowledge` | What the knowledge base holds |
+| `POST` | `/api/knowledge/refresh` | Scrape and rebuild |
+| `GET` | `/api/phones` · `/api/phones/{id}` | Catalogue and spec sheets |
+| `GET` | `/api/rankings` · `/api/rankable` | League tables |
+| `GET` | `/api/agents` · `/api/protocols` | Roster and transports |
+| `GET` | `/api/health` | Status of every dependency |
+| `GET` | `/api/history` · `/api/query-log` | Conversation and audit trail |
+| `WS` | `/ws/trace` | Live event stream |
+
+**Authentication: none.** The service binds to `127.0.0.1`. The only header you
+ever need is `Content-Type: application/json`, on `POST` only.
+
+> **Full reference: [`docs/API.md`](docs/API.md), or
+> [/docs-ui](http://127.0.0.1:8000/docs-ui) in the running app.**
+> Interactive OpenAPI at [/docs](http://127.0.0.1:8000/docs).
+
+---
+
+## Frontend architecture
+
+One page, no build step, no framework — `frontend/static/index.html`.
+
+```
+ ┌──────────────────────────────────────────────────────────────┐
+ │  S  Samsung Phone Assistant       ● 10 phones  [KB]  [Docs]  │
+ ├──────────────────────────────────────────────────────────────┤
+ │                                                              │
+ │                    ┌────────────────────────────────────┐    │
+ │                    │ How does the S25 Ultra compare…?   │    │
+ │                    └────────────────────────────────────┘    │
+ │   ┌──┐  ┌──────────────────────────────────────────────┐     │
+ │   │ S│  │ ⟳ Agents are working…                    ▾  │     │
+ │   └──┘  │  ✓ ATLAS    Reading your question…          │     │
+ │         │  ✓ SPECTRA  Fetching the full spec sheet     │     │
+ │         │             for the S25 Ultra and S24 Ultra  │     │
+ │         │             from PostgreSQL                  │     │
+ │         │  ⟳ VERSUS   Comparing S25 Ultra and S24 Ultra│     │
+ │         └──────────────────────────────────────────────┘     │
+ │                                                              │
+ │         The Samsung Galaxy S25 Ultra outperforms…            │
+ │                                                              │
+ │         [compare] [ATLAS → SPECTRA → VERSUS → SENTINEL]      │
+ │         [17/17 figures verified against PostgreSQL]          │
+ ├──────────────────────────────────────────────────────────────┤
+ │  Ask about a Samsung phone…                            [↑]   │
+ └──────────────────────────────────────────────────────────────┘
+```
+
+- **Agent activity** streams over the WebSocket. Each agent reports one plain
+  sentence — its `activity()` method — as it starts, and ticks green when done.
+  The panel collapses to a one-line summary once the answer arrives.
+- **Grounding chip** shows how many figures were verified against the database.
+- **Knowledge base panel** runs the refresh and shows each phone as it lands.
+- **Light and dark** follow the system theme.
+
+---
+
+## Example query workflow
+
+*"How does the Galaxy S25 Ultra compare to the S24 Ultra?"*
+
+```
+ 1  ATLAS      rule match on "compare"; resolves two names
+                 SQL  SELECT phone_id, model_name … FROM phones
+                 →    intent=compare, phone_ids=[4, 6]
+
+ 2  SPECTRA    pulls both spec sheets
+                 SQL  SELECT p.*, a.* FROM phones p
+                      LEFT JOIN phone_attributes a USING (phone_id)
+                      WHERE p.phone_id = %s                      ×2
+                 SQL  SELECT category, spec_key, spec_value
+                      FROM specifications WHERE phone_id = %s    ×2
+                 →    2 sheets, 6 fields recorded as NULL
+
+ 3  VERSUS     builds the matrix and computes every delta in Python
+                 SQL  SELECT … FROM phones LEFT JOIN phone_attributes
+                      WHERE phone_id = ANY(%s)
+                 →    17 comparable metrics; S25 Ultra leads on 9
+                 LLM  narrates the differences it was handed
+                      (it is told which side wins, never the gap)
+
+ 4  SENTINEL   extracts every number from the draft and matches it
+                 →    17/17 traced to retrieved rows → "grounded"
+
+ 5  NEXUS      returns  {answer, agents_used, pipeline, grounding, trace}
+```
+
+Total: about 6 seconds, of which ~5 is the language model.
+
+### Other intents
+
+| Question | Intent | Pipeline |
+|---|---|---|
+| "What are the camera specs of the S25 Ultra?" | `spec_lookup` | ATLAS → SPECTRA → ORACLE → NEXUS → SENTINEL |
+| "How does the S25 Ultra compare to the S24 Ultra?" | `compare` | ATLAS → SPECTRA → VERSUS → SENTINEL |
+| "Which phone has the best battery life?" | `ranking` | ATLAS → RANKER → NEXUS → SENTINEL |
+| "Write a review of the S25 Ultra" | `review` | ATLAS → SPECTRA → CRITIC → SENTINEL |
+| anything else | `general` | ATLAS → ORACLE → NEXUS → SENTINEL |
+
+---
+
+## Agent communication flow
+
+Agents never call each other's methods. They exchange `Envelope` objects over
+the **Agent Communication Protocol (ACP/1.0)**, routed by NEXUS:
+
+```
+User
+ │
+ ▼
+ATLAS  ─── SELECT phones ──────────────► PostgreSQL
+ │     ◄── matched devices ─────────────┘
+ │  Envelope(sender=NEXUS, recipient=SPECTRA,
+ │           intent="fetch.specs", payload={phone_ids:[4,6]})
+ ▼
+SPECTRA ── SELECT phone_attributes ────► PostgreSQL
+ │      ◄─ specification rows ──────────┘
+ │  Envelope(sender=SPECTRA, recipient=VERSUS,
+ │           intent="compare.devices", payload={rendered:[…]})
+ ▼
+VERSUS ─── deltas computed in Python
+ │     ─── OLLAMA-HTTP/1.1 ────────────► llama3.2:3b (localhost)
+ │     ◄── prose ───────────────────────┘
+ ▼
+SENTINEL ─ every figure checked against the retrieved rows
+ │
+ ▼
+Final response
+```
+
+Every hand-off is published on the trace bus, so the flow the console draws is
+the flow that actually happened. Watch it live at `/ws/trace`, or read it from
+the `trace` array in any `/api/ask` response.
+
+---
+
+## Project folder structure
+
+```
+py_task/
+│
+├── app.py                    ← single entry point: preflight, bring-up, serve
+├── README.md
+├── requirements.txt
+├── .env.example
+├── pytest.ini
+│
+├── agents/                   ← the eight agents, one file each
+│   ├── prompts.py            ← EVERY system prompt, in one place
+│   ├── base.py               ← Envelope, AgentCard, ACP plumbing
+│   ├── nexus.py              ← 1. Orchestrator
+│   ├── atlas.py              ← 2. Query Analyst
+│   ├── spectra.py            ← 3. Specification Retrieval
+│   ├── oracle.py             ← 4. Semantic Retrieval
+│   ├── ranker.py             ← 5. Comparative Analytics
+│   ├── versus.py             ← 6. Comparison Analyst
+│   ├── critic.py             ← 7. Review Writer
+│   └── sentinel.py           ← 8. Grounding Auditor
+│
+├── api/                      ← FastAPI surface
+│   ├── main.py               ← app, lifespan, static + docs routes
+│   ├── routes.py             ← every endpoint and the trace WebSocket
+│   └── schemas.py            ← request/response models
+│
+├── backend/                  ← shared infrastructure
+│   ├── config/settings.py    ← every tunable, sourced from .env
+│   ├── core/
+│   │   ├── events.py         ← thread-safe trace bus (workers → WebSocket)
+│   │   ├── protocols.py      ← the five named protocols
+│   │   └── logging_setup.py
+│   ├── llm/ollama_client.py  ← local inference; no tools, loopback only
+│   └── rag/
+│       ├── chunker.py        ← builds the corpus FROM database rows
+│       ├── embedder.py       ← MiniLM on CPU
+│       ├── indexer.py        ← writes chunks + embeddings back to Postgres
+│       └── retriever.py      ← hybrid dense + trigram search, in SQL
+│
+├── database/                 ← everything PostgreSQL
+│   ├── schema.sql            ← tables, views, cosine_similarity()
+│   ├── engine.py             ← pooled psycopg2; traces + audits every query
+│   ├── repository.py         ← EVERY read an agent may perform
+│   └── loader.py             ← ingest-side upserts
+│
+├── scraper/                  ← GSMArena → structured rows
+│   ├── catalog.py            ← popularity crawl + flagship-aware selection
+│   ├── fetcher.py            ← fetch, save, and fall back when blocked
+│   ├── parser.py             ← HTML → verbatim spec rows
+│   ├── normalizer.py         ← verbatim text → 70 typed, NULL-honest columns
+│   └── pipeline.py           ← the refresh generator, with progress events
+│
+├── frontend/static/
+│   ├── index.html            ← the chat interface
+│   └── docs.html             ← the API reference page
+│
+├── docs/
+│   ├── AGENTS.md             ← every agent: input, output, SQL, prompt
+│   ├── API.md                ← full endpoint reference
+│   ├── POSTMAN.md            ← step-by-step Postman guide
+│   └── postman_collection.json
+│
+├── scripts/
+│   ├── setup_db.py           ← create the database and apply the schema
+│   ├── refresh.py            ← CLI knowledge-base refresh
+│   └── report.py             ← what the database actually holds
+│
+├── tests/                    ← 92 tests
+│   ├── test_parsing.py       ← parser, normalizer, catalogue selection
+│   ├── test_database.py      ← schema, NULL policy, resolution, retrieval
+│   ├── test_agents.py        ← agent behaviour and the grounding guarantee
+│   ├── test_api.py           ← HTTP + WebSocket surface
+│   ├── test_scraper.py       ← fetcher fallback and the refresh pipeline
+│   └── test_app.py           ← startup and bring-up logic
+│
+└── data/
+    ├── pages/                ← saved source HTML (the fallback corpus)
+    └── catalog.json          ← the current selection
+```
+
+---
+
+## Installation
+
+See [Quick start](#quick-start). Two notes on the environment:
+
+**PostgreSQL.** Any 14+ server works. pgvector is *not* needed — similarity is a
+plain SQL function. The role needs `CREATEDB` the first time.
+
+**Model sizing.** `llama3.2:3b` at q4 fits a 4 GB GPU with context to spare.
+Embeddings run on **CPU** (MiniLM does the whole corpus in ~11 s), leaving the
+GPU to the language model. For better prose on the same hardware, set
+`OLLAMA_MODEL=gemma3:4b` in `.env`.
+
+---
+
+## Refreshing the knowledge base
+
+**From the chat** — click **Knowledge base** in the header, choose how many
+phones, click **Refresh knowledge base**. Each phone appears as it is stored.
+
+**From the CLI**
+
+```bash
+python -m scripts.refresh --limit 10
+python -m scripts.refresh --offline      # from data/pages/ only
+```
+
+**From the API**
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/knowledge/refresh \
+  -H "Content-Type: application/json" -d '{"limit": 10}'
+```
+
+A refresh **replaces** the knowledge base by default, so what the console lists
+afterwards is exactly what was just loaded. Pass `--add` / `"replace": false` to
+append instead.
+
+To see what landed:
 
 ```bash
 python -m scripts.report
 ```
 
-Re-running is safe: pages are cached on disk, and all writes are upserts.
-`scripts.ingest` and `scripts.build_index` never touch the network, so you can
-rebuild the database from the saved pages at any time:
+---
 
-```bash
-python -m scripts.run_pipeline --skip-scrape
-```
+## Using the chat interface
 
-### If GSMArena rate-limits you
+Open <http://127.0.0.1:8000>. Four starter questions are on the welcome screen;
+otherwise just type. `Enter` sends, `Shift+Enter` makes a new line.
 
-GSMArena throttles by IP and returns `429` for a while once triggered — no TLS
-fingerprint gets around it. The fetcher backs off automatically, and any pages it
-could not get can be collected later:
+While the agents work you see each one by name with a plain sentence describing
+what it is doing. When the answer arrives the panel collapses to
+`✓ 4 agents · 6273 ms` — click it to reopen the steps.
 
-```bash
-python -m scripts.fill_missing --wait 900 --spacing 75 --rounds 6
-python -m scripts.ingest && python -m scripts.build_index
-```
+Under each answer:
 
-Anything already saved is skipped, so this only fetches the gaps.
+| Chip | Meaning |
+|---|---|
+| `compare` | The intent that ran |
+| `ATLAS → SPECTRA → VERSUS → SENTINEL` | The pipeline |
+| `Samsung Galaxy S25 Ultra` | Devices resolved from the database |
+| `17/17 figures verified against PostgreSQL` | SENTINEL's audit |
+| `not in database: …` | A phone you named that is not loaded |
+
+Ask about a phone that is not loaded and the system says so rather than
+inventing an answer. That is the point.
 
 ---
 
-## API
+## API documentation
 
-| Method | Path | Purpose |
+| Where | What |
+|---|---|
+| [/docs-ui](http://127.0.0.1:8000/docs-ui) | Human-readable reference — the **API docs** button in the header |
+| [/docs](http://127.0.0.1:8000/docs) | Interactive OpenAPI explorer |
+| [`docs/API.md`](docs/API.md) | The same reference, in the repo |
+| [`docs/postman_collection.json`](docs/postman_collection.json) | Importable collection |
+
+---
+
+## Testing the API with Postman
+
+Full guide: **[`docs/POSTMAN.md`](docs/POSTMAN.md)**. The short version:
+
+1. **Import** `docs/postman_collection.json` — every endpoint arrives pre-filled.
+2. Or build one by hand: **New → HTTP**, method **POST**, URL
+   `http://127.0.0.1:8000/api/ask`, header
+   `Content-Type: application/json`, **Body → raw → JSON**:
+
+```json
+{ "question": "How does the Galaxy S25 Ultra compare to the S24 Ultra?" }
+```
+
+3. **Send**. In the response look at `agents_used` for the multi-agent flow,
+   `grounding.verdict` for the audit, and expand `trace` to show the actual SQL
+   each agent ran — that is the proof the answer came from PostgreSQL.
+
+Use `127.0.0.1`, not `localhost`: on some Windows setups `localhost` resolves to
+IPv6 first and the connection is refused.
+
+---
+
+## Running the tests
+
+```bash
+python -m pytest                  # all 92
+python -m pytest -m parsing       # scraper; no services needed
+python -m pytest -m database      # schema, NULL policy, retrieval
+python -m pytest -m agents        # agent behaviour
+python -m pytest -m api           # HTTP + WebSocket
+python -m pytest -m scraper       # fallback and refresh pipeline
+python -m pytest -m "not llm"     # skip anything needing Ollama
+```
+
+Tests skip cleanly when PostgreSQL, Ollama or the saved pages are absent, and
+none of them destroy the knowledge base you just loaded.
+
+Beyond happy paths, they assert that: absent facts are NULL and never a
+placeholder; every numeric attribute is physically plausible; `"S25"` resolves to
+the base model and not the Ultra; an unknown model is declared rather than
+answered; `rank_by` rejects any column outside the whitelist; SENTINEL catches
+invented figures including unit-glued ones like `240W`; a blocked origin is
+contacted exactly once; and every trace event is JSON-serialisable.
+
+---
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
 |---|---|---|
-| `POST` | `/api/ask` | Ask a question. Returns the answer, intent, agents used, grounding verdict and the full trace |
-| `GET` | `/api/health` | Database, LLM, embedding and corpus status |
-| `GET` | `/api/agents` | Agent roster with roles, capabilities and protocols |
-| `GET` | `/api/protocols` | The protocol registry the console renders |
-| `GET` | `/api/phones` | Catalogue overview |
-| `GET` | `/api/phones/{id}` | Full spec sheet for one device |
-| `GET` | `/api/rankings?metric=&limit=` | Ranking over a whitelisted metric |
-| `GET` | `/api/rankable` | Which metrics can be ranked |
-| `GET` | `/api/history?session_key=` | Stored conversation |
-| `GET` | `/api/query-log` | Recent database traffic |
-| `WS` | `/ws/trace` | Live agent + protocol event stream |
+| `STARTUP FAILED: cannot reach PostgreSQL` | Server down, or wrong credentials | Start the service; check `PG_USER` / `PG_PASSWORD` in `.env` |
+| `LLM unavailable` warning at startup | Ollama not running | `ollama serve`, then `ollama pull llama3.2:3b`. The app still starts and returns database rows instead of prose |
+| Answers say a phone "is not in this database" | It genuinely is not loaded | Check the header chip; refresh with a bigger `--limit` |
+| Refresh shows *"GSMArena denied access"* | Rate-limited by IP | Nothing to do — it finished from `data/pages/`. Same data |
+| Refresh returns **409** | One is already running | Wait, or poll `/api/knowledge/refresh/status` |
+| First question is slow | The model is loading into VRAM | Normal. Later questions are fast |
+| Postman: `ECONNREFUSED` | App not running, or `localhost` resolved to IPv6 | Start `python app.py`; use `127.0.0.1` |
+| Chat shows no agent steps | WebSocket blocked | Check the browser console; the header chip shows the connection state |
+| `port already in use` | Another instance is running | `python app.py --port 8001` |
 
-Interactive docs at `/docs`.
+Check every dependency at once:
 
 ```bash
-curl -X POST http://127.0.0.1:8000/api/ask \
-  -H "Content-Type: application/json" \
-  -d '{"question":"Which Samsung phone has the best battery life?"}'
+python app.py --check
+curl http://127.0.0.1:8000/api/health
 ```
-
-```jsonc
-{
-  "intent": "ranking",
-  "agents_used": ["NEXUS", "ATLAS", "RANKER", "SENTINEL"],
-  "answer": "The Samsung Galaxy S26+ and the Samsung Galaxy S26 Ultra have the best battery life, tied at 16.4 hours.",
-  "grounding": { "verdict": "grounded", "numeric_claims": 1, "supported": 1, "unsupported": [] },
-  "latency_ms": 977
-}
-```
-
----
-
-## Tests
-
-```bash
-python -m pytest                     # everything
-python -m pytest -m parsing          # scraper, no services needed
-python -m pytest -m database         # schema, integrity, retrieval
-python -m pytest -m agents           # agent behaviour
-python -m pytest -m api              # HTTP + WebSocket
-python -m pytest -m app              # app.py bring-up logic
-python -m pytest -m "not llm"        # skip anything needing Ollama
-```
-
-Tests skip cleanly rather than failing when PostgreSQL, Ollama or the scraped
-pages are absent.
-
-What they actually check, beyond happy paths:
-
-- Absent facts are NULL and never a placeholder, and NULLs genuinely exist.
-- Every numeric attribute is within a physically plausible range.
-- `"Galaxy S23"` resolves to the base model, **not** the Ultra.
-- An unknown model (`Galaxy S99 Omega`) resolves to nothing and is declared as
-  unknown in the answer rather than answered from model memory.
-- `rank_by` rejects any column outside the whitelist, including SQL injection.
-- SENTINEL flags invented figures and ignores years and list markers.
-- Every trace event is JSON-serialisable — a `Decimal` leaking into an event
-  detail would silently drop every WebSocket subscriber.
-
-Defects these tests caught during development, all since fixed:
-
-1. `str.title()` rendered the `FE` variant as `Fe`, so the Galaxy S FE flagship
-   quota silently matched nothing.
-2. `Decimal` and `date` values from database rows leaked into trace events and
-   crashed `send_json`, disconnecting the console's live feed after the first
-   frame.
-3. SENTINEL's number regex rejected any figure followed by a word character, so
-   unit-glued claims like `240W` and `5000mAh` — most real claims — were never
-   audited.
-
----
-
-## Design notes and trade-offs
-
-**Rule-first intent classification.** ATLAS uses regex rules and only falls back
-to the LLM when no device is named and no comparative cue is present. Rules are
-instant and deterministic; a 3B model classifying "which has the best battery"
-is neither. The LLM fallback covers the open-ended tail.
-
-**Superlatives are SQL, not RAG.** Asked "which phone has the best battery life",
-embeddings return every battery chunk with near-identical scores — the question
-is an aggregation, not a similarity search. RANKER answers it with `ORDER BY`,
-which is both correct and explainable, and reports the NULL exclusions.
-
-**Hybrid retrieval.** Pure dense search confuses adjacent model numbers. The
-trigram pass restores exact-token matching at a 25 % weight.
-
-**Deltas computed in code.** See [The agents](#the-agents).
-
-**Absence stated, not implied.** Early on, CRITIC claimed the Galaxy Z Fold8 had
-no IP rating when the database held `IP48`. The model was being asked to notice
-what was *missing* from a long sheet, which it does badly. The fix was to compute
-the missing-field list in Python and hand it over explicitly. The general
-principle: never make the model infer a negative.
-
-**Page HTML is kept.** Every source page is saved under `data/pages/` with its
-SHA-256 recorded in `phones`. Parsing can be re-run and re-verified offline
-without re-crawling, which also makes the parser tests run against real input.
 
 ---
 
 ## Known limitations
 
-- **Corpus size.** The catalogue targets 30 devices. If GSMArena rate-limits the
-  crawl, fewer will be loaded; `scripts.fill_missing` collects the rest later.
-  `GET /api/health` always reports the true count.
-- **Vector search is a full scan.** Fine at ~600 chunks (~200 ms); would need
-  pgvector + HNSW past roughly 10⁵.
-- **SENTINEL audits numbers, not prose.** A wrong chipset *name* would pass the
-  audit; a wrong chipset *score* would not. Extending it to entity claims is the
-  obvious next step.
+- **Vector search is a full scan.** Fine at a few hundred chunks (~200 ms); would
+  need pgvector with HNSW past roughly 10⁵.
+- **SENTINEL audits numbers, not prose.** A wrong chipset *name* would pass; a
+  wrong chipset *score* would not.
 - **Small-model prose.** `llama3.2:3b` was chosen to fit 4 GB of VRAM. The facts
   are grounded and checked, but the writing is plainer than a larger model's.
-  `OLLAMA_MODEL=gemma3:4b` in `.env` trades some speed for better prose on the
-  same hardware.
 - **Prices are GSMArena's snapshot** at scrape time, in whatever currencies that
-  page listed. Missing currencies are NULL rather than converted.
+  page listed. Missing currencies are NULL, not converted.

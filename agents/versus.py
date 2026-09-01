@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from agents.prompts import VERSUS_COMPARE
 from agents.base import Agent, AgentCard, AgentContext, Envelope
 from backend.core.logging_setup import get_logger
 from database import repository as repo
@@ -15,18 +16,6 @@ from backend.llm.ollama_client import LLMUnavailable, client
 
 log = get_logger("agents.versus")
 
-SYSTEM = (
-    "You are VERSUS, a comparison analyst in a Samsung phone advisory system. "
-    "You are given a verified comparison drawn from a PostgreSQL database: each "
-    "metric lists one value per device and states which device leads. Write the "
-    "comparison using ONLY those figures.\n"
-    "Rules:\n"
-    "- Every number you write must be copied from a device's own value line.\n"
-    "- Never state a number that is not in the source, and never do arithmetic "
-    "of your own -- which device leads is already decided for you.\n"
-    "- If a field says NOT PUBLISHED, say the source does not publish it. Do not estimate.\n"
-    "- Be specific and concise. No marketing language."
-)
 
 # Fields worth calling out, with the direction that counts as an advantage.
 DELTA_FIELDS: list[tuple[str, str, str, str]] = [
@@ -68,6 +57,11 @@ class VersusAgent(Agent):
         reads_database=True,
         uses_llm=True,
     )
+
+
+    def activity(self, msg: Envelope, ctx: AgentContext) -> str:
+        names = repo.display_names(msg.payload.get("phone_ids") or [])
+        return f"Comparing {names}" if names else "Comparing the selected devices"
 
     def handle(self, msg: Envelope, ctx: AgentContext) -> Envelope:
         phone_ids: list[int] = msg.payload.get("phone_ids") or []
@@ -124,7 +118,7 @@ class VersusAgent(Agent):
         )
         try:
             answer = client().generate(
-                prompt, system=SYSTEM, trace=ctx.trace, agent=self.name,
+                prompt, system=VERSUS_COMPARE.text, trace=ctx.trace, agent=self.name,
                 purpose="comparison narrative", max_tokens=700,
             ).text
         except LLMUnavailable as exc:

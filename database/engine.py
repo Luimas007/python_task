@@ -216,12 +216,6 @@ def execute(
     return result if returning else rowcount
 
 
-def execute_many(sql: str, rows: Sequence[Sequence[Any]], page_size: int = 200) -> int:
-    if not rows:
-        return 0
-    with cursor(dict_rows=False) as cur:
-        psycopg2.extras.execute_batch(cur, sql, rows, page_size=page_size)
-        return len(rows)
 
 
 # --------------------------------------------------------------------------

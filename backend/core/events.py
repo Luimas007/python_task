@@ -54,6 +54,8 @@ class TraceEvent:
     protocol: str | None = None
     status: str = "ok"      # ok | error | pending
     duration_ms: float | None = None
+    # Plain-language description of what an agent is doing, shown live in chat.
+    activity: str | None = None
     detail: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:

@@ -11,7 +11,8 @@ second start takes a couple of seconds.
 Options
     --port N        serve on a different port
     --host H        bind a different interface
-    --scrape        force a fresh crawl of GSMArena before starting
+    --scrape        refresh the knowledge base before starting
+    --limit N       how many phones to load when refreshing (default 10)
     --rebuild       re-ingest saved pages and rebuild the vector index
     --reset         drop every row and rebuild from the saved pages
     --no-browser    do not open a browser window
@@ -112,52 +113,59 @@ def saved_page_count() -> int:
                 if not p.name.startswith("_")])
 
 
-def ensure_data(force_scrape: bool = False, force_rebuild: bool = False) -> dict:
-    """Bring the knowledge base up to a state the agents can serve from."""
+def ensure_data(force_scrape: bool = False, force_rebuild: bool = False,
+                limit: int | None = None) -> dict:
+    """Bring the knowledge base up to a state the agents can serve from.
+
+    The console can refresh on demand, so startup only does work when there is
+    nothing to serve at all -- or when the operator asked for it explicitly.
+    """
     state = corpus_state()
     pages = saved_page_count()
 
-    # --- 1. source pages -------------------------------------------------
+    if state["phones"] and not (force_scrape or force_rebuild):
+        # Already populated. Repair the index if it went missing, then leave it.
+        if state["chunks"] == 0 or state["chunks"] != state["embedded"]:
+            log.info("rebuilding the retrieval index ...")
+            from backend.rag import indexer
+
+            indexer.rebuild()
+            state = corpus_state()
+        return state
+
     # `--rebuild` means "rebuild from what is on disk", so it must never reach
-    # for the network. A first run with nothing at all does crawl, but only
-    # because there is no other way to get started.
-    first_run = pages == 0 and state["phones"] == 0 and not force_rebuild
-    if force_scrape or first_run:
-        log.info("no saved pages found -- crawling GSMArena (a few minutes) ...")
-        from scripts import scrape_pages
+    # for the network. Everything else may, falling back to the local pages the
+    # moment GSMArena denies access.
+    if force_rebuild and pages == 0 and state["phones"] == 0:
+        raise StartupError(
+            "the knowledge base is empty and there are no saved pages to load.\n"
+            "  run:  python app.py --scrape"
+        )
 
-        scrape_pages.main(refresh_catalog=True)
-        pages = saved_page_count()
-        if pages == 0:
-            raise StartupError(
-                "could not download any pages from GSMArena.\n"
-                "  check your connection, then retry:  python app.py --scrape"
-            )
+    from scraper import pipeline
 
-    # --- 2. load them ----------------------------------------------------
-    if force_rebuild or force_scrape or state["phones"] == 0:
-        if pages == 0:
-            raise StartupError(
-                "the database is empty and there are no saved pages to load.\n"
-                "  run:  python app.py --scrape"
-            )
-        log.info("loading %d saved page(s) into PostgreSQL ...", pages)
-        from scripts import ingest
+    offline = force_rebuild
+    log.info("loading the knowledge base%s ...",
+             " from saved pages" if offline else "")
+    final: dict = {}
+    for event in pipeline.refresh(limit=limit, offline=offline):
+        final = event
+        if event["phase"] == "phone" and event["status"] != "scraping":
+            log.info("   %-34s %s", event["name"], event["status"])
+        elif event["phase"] != "phone":
+            log.info("   %s", event.get("message", event["phase"]))
 
-        ingest.main()
-        state = corpus_state()
+    if final.get("offline") and not offline:
+        log.warning("GSMArena denied access (%s); finished from the local pages",
+                    final.get("block_reason"))
 
-    # --- 3. index --------------------------------------------------------
-    if force_rebuild or force_scrape or state["chunks"] == 0 \
-            or state["chunks"] != state["embedded"]:
-        log.info("building the retrieval index ...")
-        from backend.rag import indexer
-
-        indexer.rebuild()
-        state = corpus_state()
-
+    state = corpus_state()
     if state["phones"] == 0:
-        raise StartupError("no phones in the database after bring-up; see the log above")
+        raise StartupError(
+            "no phones could be loaded.\n"
+            "  there are no saved pages in data/pages/ and GSMArena is unreachable.\n"
+            "  you can also load the knowledge base from the console once it starts."
+        )
     return state
 
 
@@ -205,7 +213,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--host", default=settings.api.host)
     ap.add_argument("--port", type=int, default=settings.api.port)
     ap.add_argument("--scrape", action="store_true",
-                    help="force a fresh crawl of GSMArena before starting")
+                    help="refresh the knowledge base before starting")
+    ap.add_argument("--limit", type=int, default=None,
+                    help="phones to load when refreshing (default: 10)")
     ap.add_argument("--rebuild", action="store_true",
                     help="re-ingest saved pages and rebuild the vector index")
     ap.add_argument("--reset", action="store_true",
@@ -233,7 +243,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.reset:
             reset_database()
         state = ensure_data(force_scrape=args.scrape,
-                            force_rebuild=args.rebuild or args.reset)
+                            force_rebuild=args.rebuild or args.reset,
+                            limit=args.limit)
         log.info("      %d phones, %d chunks, %d embedded",
                  state["phones"], state["chunks"], state["embedded"])
 

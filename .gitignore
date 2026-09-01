@@ -3,8 +3,12 @@ __pycache__/
 .env
 venv/
 .venv/
-logs/*.log
-data/pages/*.html
-data/raw/*.html
 .pytest_cache/
 *.egg-info/
+
+# runtime output
+logs/*.log
+logs/*.png
+
+# scraped source pages are large; keep the directory, not the contents
+data/pages/*.html

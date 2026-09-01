@@ -1,478 +1,560 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Samsung Phone Intelligence Console</title>
+<title>Samsung Phone Assistant</title>
+<link rel="icon" href="/favicon.ico">
 <style>
   :root{
-    --bg:#0b0f17; --panel:#111827; --panel-2:#0f1724; --line:#1f2937;
-    --txt:#e5e7eb; --muted:#94a3b8; --dim:#64748b;
-    --accent:#38bdf8; --ok:#22c55e; --warn:#f59e0b; --err:#ef4444;
-    --pg:#0ea5e9; --acp:#a855f7; --llm:#f59e0b; --vec:#14b8a6; --ws:#64748b;
-    --mono:ui-monospace,"JetBrains Mono","Cascadia Code",Consolas,monospace;
-    --sans:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+    --bg:#faf9f7; --surface:#ffffff; --sunk:#f4f2ef;
+    --line:#e6e2dc; --line-soft:#efece7;
+    --txt:#22201d; --muted:#6f6a63; --faint:#9a948c;
+    --accent:#c96442; --accent-soft:#fdf1ec;
+    --ok:#3f8f5f; --warn:#b5811f; --err:#c0392b;
+    --radius:14px;
+    --sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    --mono:ui-monospace,"SF Mono","Cascadia Code",Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#1f1e1c; --surface:#262523; --sunk:#2e2c29;
+      --line:#3a3835; --line-soft:#332f2c;
+      --txt:#f0eee9; --muted:#a8a29a; --faint:#7d766e;
+      --accent:#d97757; --accent-soft:#3a2a23;
+      --ok:#5fb47f; --warn:#d4a33c; --err:#e06c5b;
+    }
   }
   *{box-sizing:border-box}
   html,body{height:100%}
-  body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.5 var(--sans);overflow:hidden}
+  body{margin:0;background:var(--bg);color:var(--txt);
+       font:15px/1.65 var(--sans);-webkit-font-smoothing:antialiased}
+  button{font:inherit;cursor:pointer}
 
-  /* ---------- shell ---------- */
-  .app{display:grid;grid-template-rows:auto 1fr;height:100vh}
-  header{display:flex;align-items:center;gap:16px;padding:10px 18px;
-    background:linear-gradient(180deg,#0f1724,#0b0f17);border-bottom:1px solid var(--line)}
-  .brand{display:flex;align-items:center;gap:10px;font-weight:650;letter-spacing:.2px}
-  .brand .dot{width:9px;height:9px;border-radius:50%;background:var(--accent);
-    box-shadow:0 0 12px var(--accent)}
-  .brand small{display:block;font-weight:400;font-size:11px;color:var(--muted);letter-spacing:.3px}
-  .pills{display:flex;gap:8px;margin-left:auto;flex-wrap:wrap}
-  .pill{display:flex;align-items:center;gap:6px;padding:4px 10px;border:1px solid var(--line);
-    border-radius:999px;background:var(--panel);font-size:11px;color:var(--muted);white-space:nowrap}
-  .pill b{color:var(--txt);font-weight:600}
-  .led{width:7px;height:7px;border-radius:50%;background:var(--dim)}
-  .led.on{background:var(--ok);box-shadow:0 0 8px var(--ok)}
-  .led.off{background:var(--err);box-shadow:0 0 8px var(--err)}
+  /* ============ layout ============ */
+  .app{display:flex;flex-direction:column;height:100vh}
 
-  main{display:grid;grid-template-columns:minmax(340px,1.05fr) minmax(420px,1.25fr) minmax(340px,1fr);
-    gap:12px;padding:12px;overflow:hidden}
-  .col{display:flex;flex-direction:column;gap:12px;min-height:0;overflow:hidden}
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;
-    display:flex;flex-direction:column;min-height:0;overflow:hidden}
-  .card > h2{margin:0;padding:10px 14px;font-size:11px;font-weight:650;letter-spacing:.9px;
-    text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--line);
-    display:flex;align-items:center;gap:8px;background:var(--panel-2)}
-  .card > h2 .count{margin-left:auto;font-weight:500;color:var(--dim);letter-spacing:0;
-    text-transform:none;font-size:11px}
-  .body{padding:12px 14px;overflow-y:auto;min-height:0}
-  .grow{flex:1;min-height:0}
+  header{display:flex;align-items:center;gap:12px;padding:10px 20px;
+    border-bottom:1px solid var(--line);background:var(--surface);flex:none}
+  .logo{width:26px;height:26px;border-radius:7px;background:var(--accent);
+    display:grid;place-items:center;color:#fff;font-weight:700;font-size:13px;flex:none}
+  .title{font-weight:600;font-size:15px}
+  .title span{display:block;font-weight:400;font-size:11.5px;color:var(--muted)}
+  .spacer{flex:1}
+  .hbtn{background:transparent;border:1px solid var(--line);color:var(--muted);
+    border-radius:9px;padding:6px 12px;font-size:12.5px;display:flex;align-items:center;gap:6px}
+  .hbtn:hover{border-color:var(--accent);color:var(--accent)}
+  .hbtn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .hbtn.primary:hover{opacity:.9;color:#fff}
+  .hbtn:disabled{opacity:.45;cursor:not-allowed}
+  .kbchip{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;
+    padding:5px 11px;background:var(--sunk);border-radius:99px}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--faint);flex:none}
+  .dot.ok{background:var(--ok)} .dot.err{background:var(--err)}
+  .dot.busy{background:var(--warn);animation:blink 1s infinite}
+  @keyframes blink{50%{opacity:.3}}
 
-  /* ---------- chat ---------- */
-  #chat{display:flex;flex-direction:column;gap:12px}
-  .msg{max-width:94%;padding:10px 13px;border-radius:11px;white-space:pre-wrap;
-    word-break:break-word;font-size:13.5px;line-height:1.62}
-  .msg.user{align-self:flex-end;background:#1e3a5f;border:1px solid #2b5580}
-  .msg.bot{align-self:flex-start;background:var(--panel-2);border:1px solid var(--line)}
-  .msg.sys{align-self:center;background:transparent;border:1px dashed var(--line);
-    color:var(--muted);font-size:12px;text-align:center;max-width:100%}
-  .meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px;padding-top:8px;
-    border-top:1px solid var(--line)}
-  .tag{font-size:10.5px;padding:2px 7px;border-radius:5px;background:#0b1220;
-    border:1px solid var(--line);color:var(--muted);font-family:var(--mono)}
-  .tag.ok{color:var(--ok);border-color:#14532d}
-  .tag.warn{color:var(--warn);border-color:#78350f}
-  .tag.err{color:var(--err);border-color:#7f1d1d}
-  .composer{display:flex;gap:8px;padding:10px;border-top:1px solid var(--line);background:var(--panel-2)}
-  .composer input{flex:1;background:#0b1220;border:1px solid var(--line);border-radius:9px;
-    padding:10px 12px;color:var(--txt);font:14px var(--sans);outline:none}
-  .composer input:focus{border-color:var(--accent)}
-  .composer button{background:var(--accent);color:#062033;border:0;border-radius:9px;
-    padding:0 18px;font-weight:650;cursor:pointer;font-size:13px}
-  .composer button:disabled{opacity:.45;cursor:not-allowed}
-  .samples{display:flex;flex-wrap:wrap;gap:6px;padding:0 10px 10px;background:var(--panel-2)}
-  .samples button{background:#0b1220;border:1px solid var(--line);color:var(--muted);
-    border-radius:7px;padding:5px 9px;font-size:11.5px;cursor:pointer}
-  .samples button:hover{border-color:var(--accent);color:var(--txt)}
+  main{flex:1;overflow-y:auto;scroll-behavior:smooth}
+  .wrap{max-width:780px;margin:0 auto;padding:26px 20px 40px}
 
-  /* ---------- agents ---------- */
-  .agents{display:grid;grid-template-columns:1fr 1fr;gap:9px;padding:12px}
-  .agent{position:relative;border:1px solid var(--line);border-radius:10px;padding:9px 10px;
-    background:var(--panel-2);transition:border-color .18s,box-shadow .18s,transform .18s}
-  .agent .nm{display:flex;align-items:center;gap:7px;font-weight:650;font-size:12.5px;
-    font-family:var(--mono);letter-spacing:.4px}
-  .agent .swatch{width:8px;height:8px;border-radius:2px;flex:none}
-  .agent .role{font-size:10.5px;color:var(--dim);margin-top:3px}
-  .agent .state{position:absolute;top:8px;right:9px;font-size:9px;font-family:var(--mono);
-    color:var(--dim);letter-spacing:.5px}
-  .agent.active{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent),0 0 22px rgba(56,189,248,.28);
-    transform:translateY(-1px)}
-  .agent.active .state{color:var(--accent)}
-  .agent.done{border-color:#14532d}
-  .agent.done .state{color:var(--ok)}
-  .agent.error{border-color:#7f1d1d}
-  .agent.error .state{color:var(--err)}
-  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
-  .agent.active .nm .swatch{animation:pulse 1s infinite}
+  /* ============ welcome ============ */
+  .hero{text-align:center;padding:52px 0 26px}
+  .hero h1{font-size:27px;margin:0 0 8px;font-weight:600;letter-spacing:-.4px}
+  .hero p{color:var(--muted);margin:0;font-size:14.5px}
+  .starters{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:26px}
+  .starter{text-align:left;background:var(--surface);border:1px solid var(--line);
+    border-radius:var(--radius);padding:13px 15px;color:var(--txt);font-size:13.5px;
+    transition:border-color .15s,transform .15s}
+  .starter:hover{border-color:var(--accent);transform:translateY(-1px)}
+  .starter b{display:block;font-size:11px;color:var(--accent);text-transform:uppercase;
+    letter-spacing:.6px;margin-bottom:3px;font-weight:600}
+  @media(max-width:640px){.starters{grid-template-columns:1fr}}
 
-  /* ---------- flow ---------- */
-  #flow{padding:10px 12px;display:flex;flex-direction:column;gap:5px;font-family:var(--mono);font-size:11.5px}
-  .hop{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;
-    padding:5px 8px;border-radius:7px;background:var(--panel-2);border-left:2px solid var(--acp);
-    animation:slide .22s ease}
-  @keyframes slide{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:none}}
-  .hop .who{color:var(--txt);white-space:nowrap}
-  .hop .arrow{color:var(--acp)}
-  .hop .what{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .hop .ms{color:var(--dim);font-size:10.5px}
+  /* ============ messages ============ */
+  .turn{margin-bottom:26px}
+  .user-msg{display:flex;justify-content:flex-end}
+  .user-msg div{background:var(--accent);color:#fff;padding:10px 15px;
+    border-radius:16px 16px 4px 16px;max-width:75%;white-space:pre-wrap}
+  .bot{display:flex;gap:12px}
+  .avatar{width:27px;height:27px;border-radius:8px;background:var(--accent);
+    display:grid;place-items:center;color:#fff;font-size:12px;font-weight:700;flex:none;margin-top:2px}
+  .bot-body{flex:1;min-width:0}
+  .answer{white-space:pre-wrap;word-wrap:break-word}
+  .answer strong{font-weight:650}
 
-  /* ---------- protocol log ---------- */
-  #proto{padding:8px 10px;font-family:var(--mono);font-size:11px;display:flex;
-    flex-direction:column;gap:4px}
-  .frame{border-left:2px solid var(--line);padding:5px 9px;border-radius:0 7px 7px 0;
-    background:var(--panel-2);animation:slide .2s ease}
-  .frame .top{display:flex;gap:8px;align-items:center}
-  .frame .pr{font-size:9.5px;padding:1px 6px;border-radius:4px;font-weight:600;flex:none}
-  .frame .txt{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
-  .frame .ms{color:var(--dim);font-size:10px;flex:none}
-  .frame .sql{margin-top:4px;color:#7dd3fc;font-size:10.5px;white-space:pre-wrap;
-    word-break:break-all;max-height:78px;overflow:hidden;line-height:1.45}
-  .frame.pg{border-left-color:var(--pg)}   .frame.pg .pr{background:#082f49;color:#7dd3fc}
-  .frame.vec{border-left-color:var(--vec)} .frame.vec .pr{background:#042f2e;color:#5eead4}
-  .frame.acp{border-left-color:var(--acp)} .frame.acp .pr{background:#2e1065;color:#d8b4fe}
-  .frame.llm{border-left-color:var(--llm)} .frame.llm .pr{background:#451a03;color:#fcd34d}
-  .frame.sys{border-left-color:var(--ws)}  .frame.sys .pr{background:#1e293b;color:#cbd5e1}
-  .frame.err{border-left-color:var(--err)} .frame.err .pr{background:#450a0a;color:#fca5a5}
+  /* ============ agent activity ============ */
+  .activity{background:var(--sunk);border:1px solid var(--line-soft);
+    border-radius:12px;padding:4px;margin-bottom:12px}
+  .act-head{display:flex;align-items:center;gap:8px;padding:7px 10px;
+    font-size:12px;color:var(--muted);cursor:pointer;user-select:none}
+  .act-head .chev{margin-left:auto;transition:transform .2s;font-size:10px}
+  .activity.closed .chev{transform:rotate(-90deg)}
+  .activity.closed .act-list{display:none}
+  .act-list{padding:2px 4px 5px}
+  .step{display:flex;align-items:flex-start;gap:9px;padding:6px 8px;border-radius:8px;
+    font-size:13px;animation:fadein .25s ease}
+  @keyframes fadein{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:none}}
+  .step .ico{width:16px;height:16px;flex:none;margin-top:2px;display:grid;place-items:center}
+  .step .agent{font-weight:650;font-family:var(--mono);font-size:11.5px;
+    letter-spacing:.3px;flex:none}
+  .step .what{color:var(--muted);min-width:0}
+  .step.running .what{color:var(--txt)}
+  .step.running{background:var(--surface)}
+  .spin{width:11px;height:11px;border:2px solid var(--line);border-top-color:var(--accent);
+    border-radius:50%;animation:spin .7s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .tick{color:var(--ok);font-size:12px;font-weight:700}
+  .cross{color:var(--err);font-size:12px;font-weight:700}
 
-  /* ---------- misc ---------- */
-  .legend{display:flex;flex-wrap:wrap;gap:6px;padding:10px 12px;border-bottom:1px solid var(--line)}
-  .lg{display:flex;align-items:center;gap:5px;font-size:10.5px;color:var(--muted);
-    font-family:var(--mono)}
-  .lg i{width:9px;height:9px;border-radius:2px;display:inline-block}
-  table{width:100%;border-collapse:collapse;font-size:12px}
-  th,td{text-align:left;padding:5px 7px;border-bottom:1px solid var(--line)}
-  th{color:var(--dim);font-weight:600;font-size:10.5px;text-transform:uppercase;letter-spacing:.5px}
-  td.num{text-align:right;font-family:var(--mono)}
-  .null{color:var(--dim);font-style:italic;font-size:11px}
-  .stat{display:flex;justify-content:space-between;padding:4px 0;font-size:12px;
-    border-bottom:1px dashed var(--line)}
-  .stat span:last-child{font-family:var(--mono);color:var(--accent)}
-  .empty{color:var(--dim);font-size:12px;padding:14px;text-align:center}
-  ::-webkit-scrollbar{width:9px;height:9px}
-  ::-webkit-scrollbar-thumb{background:#1f2937;border-radius:6px}
+  /* ============ footer of a turn ============ */
+  .meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;align-items:center}
+  .chip{font-size:11px;padding:3px 9px;border-radius:99px;background:var(--sunk);
+    color:var(--muted);border:1px solid var(--line-soft)}
+  .chip.ok{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 30%,transparent)}
+  .chip.warn{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 30%,transparent)}
+  .chip.err{color:var(--err);border-color:color-mix(in srgb,var(--err) 30%,transparent)}
+  .chip.flow{font-family:var(--mono);font-size:10.5px}
+
+  table.rank{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px;
+    background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  table.rank th{text-align:left;padding:7px 11px;font-size:10.5px;text-transform:uppercase;
+    letter-spacing:.5px;color:var(--faint);border-bottom:1px solid var(--line);font-weight:600}
+  table.rank td{padding:7px 11px;border-bottom:1px solid var(--line-soft)}
+  table.rank tr:last-child td{border-bottom:0}
+  table.rank td.n{text-align:right;font-family:var(--mono)}
+  .note{font-size:11.5px;color:var(--faint);margin-top:6px;font-style:italic}
+
+  /* ============ composer ============ */
+  .composer-wrap{flex:none;border-top:1px solid var(--line);background:var(--bg);
+    padding:14px 20px 18px}
+  .composer{max-width:780px;margin:0 auto;display:flex;gap:9px;align-items:flex-end;
+    background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+    padding:9px 10px 9px 15px;transition:border-color .15s}
+  .composer:focus-within{border-color:var(--accent)}
+  .composer textarea{flex:1;border:0;outline:0;resize:none;background:transparent;
+    color:var(--txt);font:15px/1.5 var(--sans);max-height:170px;padding:5px 0}
+  .send{width:33px;height:33px;border-radius:9px;border:0;background:var(--accent);
+    color:#fff;display:grid;place-items:center;flex:none}
+  .send:disabled{opacity:.35;cursor:not-allowed}
+  .hint{max-width:780px;margin:8px auto 0;font-size:11.5px;color:var(--faint);
+    text-align:center}
+
+  /* ============ modal ============ */
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;
+    align-items:center;justify-content:center;padding:20px;z-index:50}
+  .overlay.on{display:flex}
+  .modal{background:var(--surface);border-radius:16px;width:100%;max-width:620px;
+    max-height:82vh;display:flex;flex-direction:column;overflow:hidden;
+    box-shadow:0 20px 60px rgba(0,0,0,.28)}
+  .modal h3{margin:0;padding:16px 20px;border-bottom:1px solid var(--line);font-size:15px;
+    display:flex;align-items:center;gap:9px}
+  .modal h3 .x{margin-left:auto;background:transparent;border:0;color:var(--muted);
+    font-size:20px;line-height:1;padding:0 4px}
+  .modal-body{padding:18px 20px;overflow-y:auto}
+  .modal-foot{padding:13px 20px;border-top:1px solid var(--line);display:flex;
+    gap:9px;align-items:center}
+
+  .kb-row{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:9px;
+    font-size:13.5px;animation:fadein .25s ease}
+  .kb-row.added{background:color-mix(in srgb,var(--ok) 8%,transparent)}
+  .kb-row.scraping{background:var(--sunk)}
+  .kb-row.failed{background:color-mix(in srgb,var(--err) 8%,transparent)}
+  .kb-row .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .kb-row .st{font-size:11.5px;color:var(--muted);flex:none}
+  .kb-phase{font-size:12.5px;color:var(--muted);padding:8px 10px;font-family:var(--mono)}
+  .kb-bar{height:4px;background:var(--sunk);border-radius:99px;overflow:hidden;margin:4px 0 14px}
+  .kb-bar i{display:block;height:100%;background:var(--accent);width:0;transition:width .3s}
+  .banner{padding:9px 12px;border-radius:9px;font-size:12.5px;margin-bottom:12px;
+    background:var(--accent-soft);color:var(--txt);border:1px solid var(--line)}
+
+  select,input[type=number]{background:var(--sunk);border:1px solid var(--line);
+    border-radius:8px;padding:6px 10px;color:var(--txt);font:13px var(--sans)}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:var(--line);border-radius:6px}
   ::-webkit-scrollbar-track{background:transparent}
-  @media(max-width:1250px){main{grid-template-columns:1fr;overflow-y:auto}
-    body{overflow:auto}.app{height:auto}}
 </style>
 </head>
 <body>
 <div class="app">
   <header>
-    <div class="brand">
-      <span class="dot"></span>
-      <div>Samsung Phone Intelligence
-        <small>multi-agent retrieval over a local PostgreSQL knowledge base</small></div>
-    </div>
-    <div class="pills">
-      <div class="pill"><span class="led" id="led-db"></span>PostgreSQL <b id="v-db">-</b></div>
-      <div class="pill"><span class="led" id="led-llm"></span>LLM <b id="v-llm">-</b></div>
-      <div class="pill"><span class="led" id="led-ws"></span>Trace <b id="v-ws">-</b></div>
-      <div class="pill">Devices <b id="v-phones">-</b></div>
-      <div class="pill">Chunks <b id="v-chunks">-</b></div>
-    </div>
+    <div class="logo">S</div>
+    <div class="title">Samsung Phone Assistant
+      <span>answers grounded in a local PostgreSQL knowledge base</span></div>
+    <div class="spacer"></div>
+    <div class="kbchip"><span class="dot" id="kb-dot"></span><span id="kb-label">checking…</span></div>
+    <button class="hbtn" id="btn-kb">Knowledge base</button>
+    <button class="hbtn" id="btn-docs">API docs</button>
   </header>
 
-  <main>
-    <!-- ============ left ============ -->
-    <div class="col">
-      <div class="card grow">
-        <h2>Conversation <span class="count" id="c-intent"></span></h2>
-        <div class="body grow" id="chat"></div>
-        <div class="samples" id="samples"></div>
-        <form class="composer" id="form">
-          <input id="q" autocomplete="off" placeholder="Ask about any Samsung phone in the database...">
-          <button id="send" type="submit">Ask</button>
-        </form>
-      </div>
-    </div>
-
-    <!-- ============ middle ============ -->
-    <div class="col">
-      <div class="card">
-        <h2>Agent Roster <span class="count" id="c-agents"></span></h2>
-        <div class="agents" id="agents"></div>
-      </div>
-      <div class="card grow">
-        <h2>Agent Communication Flow <span class="count">ACP/1.0</span></h2>
-        <div class="body grow" id="flow"><div class="empty">Ask a question to see agents exchange messages.</div></div>
-      </div>
-    </div>
-
-    <!-- ============ right ============ -->
-    <div class="col">
-      <div class="card grow">
-        <h2>Protocol Trace <span class="count" id="c-frames">0 frames</span></h2>
-        <div class="legend" id="legend"></div>
-        <div class="body grow" id="proto"><div class="empty">Waiting for traffic...</div></div>
-      </div>
-      <div class="card" style="max-height:38%">
-        <h2>Knowledge Base <span class="count" id="c-kb"></span></h2>
-        <div class="body" id="kb"></div>
+  <main id="main">
+    <div class="wrap" id="thread">
+      <div class="hero" id="hero">
+        <h1>What would you like to know?</h1>
+        <p>Ask about any Samsung phone stored in the knowledge base.</p>
+        <div class="starters" id="starters"></div>
       </div>
     </div>
   </main>
+
+  <div class="composer-wrap">
+    <form class="composer" id="form">
+      <textarea id="q" rows="1" placeholder="Ask about a Samsung phone…"></textarea>
+      <button class="send" id="send" type="submit" title="Send">↑</button>
+    </form>
+    <div class="hint">Every figure is retrieved from PostgreSQL and checked before it is shown.</div>
+  </div>
+</div>
+
+<!-- ================= knowledge base modal ================= -->
+<div class="overlay" id="kb-overlay">
+  <div class="modal">
+    <h3>Knowledge base
+      <button class="x" data-close="kb-overlay">×</button></h3>
+    <div class="modal-body" id="kb-body"></div>
+    <div class="modal-foot">
+      <label style="font-size:13px;color:var(--muted)">Phones
+        <select id="kb-limit">
+          <option value="5">Top 5</option>
+          <option value="10" selected>Top 10</option>
+          <option value="20">Top 20</option>
+          <option value="30">Top 30</option>
+        </select>
+      </label>
+      <div class="spacer" style="flex:1"></div>
+      <button class="hbtn primary" id="btn-refresh">Refresh knowledge base</button>
+    </div>
+  </div>
 </div>
 
 <script>
 "use strict";
-const $ = s => document.querySelector(s);
-const el = (t,c,x) => { const n=document.createElement(t); if(c)n.className=c; if(x!==undefined)n.textContent=x; return n; };
+const $  = s => document.querySelector(s);
+const el = (t,c,x)=>{const n=document.createElement(t); if(c)n.className=c;
+                     if(x!==undefined)n.textContent=x; return n;};
 
-const SAMPLES = [
-  "What are the camera specs of the Samsung Galaxy S23?",
-  "Which Samsung phone has the best battery life?",
-  "How does the Galaxy S23 compare to the S22 in terms of performance?",
-  "Write a review of the Galaxy Z Fold8",
-  "What is the screen size of the Galaxy S22?",
-  "Which phone is the lightest?"
+const STARTERS = [
+  ["Specifications", "What are the camera specs of the Galaxy S25 Ultra?"],
+  ["Comparison",     "How does the Galaxy S25 Ultra compare to the S24 Ultra?"],
+  ["Ranking",        "Which Samsung phone has the best battery life?"],
+  ["Review",         "Write a review of the Galaxy S25 Ultra"],
 ];
 
-const PROTO_CLASS = {
-  "PG-WIRE/3.0":"pg", "VEC-SQL/1.0":"vec", "ACP/1.0":"acp",
-  "OLLAMA-HTTP/1.1":"llm", "WS-TRACE/1.0":"sys"
-};
-const PROTO_SHORT = {
-  "PG-WIRE/3.0":"PG-WIRE", "VEC-SQL/1.0":"VEC-SQL", "ACP/1.0":"ACP",
-  "OLLAMA-HTTP/1.1":"OLLAMA", "WS-TRACE/1.0":"WS"
-};
+let busy = false, activeTurn = null, ws = null, kbRunning = false;
 
-let AGENTS = [], frameCount = 0, busy = false;
-
-/* ------------------------------------------------------------ bootstrap */
+/* ==================================================================== boot */
 async function boot(){
-  $("#samples").append(...SAMPLES.map(s=>{
-    const b = el("button",null,s.length>44 ? s.slice(0,42)+"..." : s);
-    b.title = s;
-    b.onclick = () => { $("#q").value = s; $("#form").requestSubmit(); };
+  $("#starters").append(...STARTERS.map(([tag,q])=>{
+    const b = el("button","starter");
+    b.append(el("b",null,tag), el("span",null,q));
+    b.onclick = ()=>{ $("#q").value = q; submit(); };
     return b;
   }));
 
-  try{
-    const p = await (await fetch("/api/protocols")).json();
-    $("#legend").append(...p.protocols.map(pr=>{
-      const d = el("div","lg"); const i = el("i");
-      i.style.background = `var(--${PROTO_CLASS[pr.id]||"ws"})`;
-      d.append(i, el("span",null,PROTO_SHORT[pr.id]||pr.id));
-      d.title = `${pr.label}\n${pr.transport}\n${pr.description}`;
-      return d;
-    }));
-  }catch(e){}
+  $("#btn-kb").onclick   = openKb;
+  $("#btn-docs").onclick = ()=> window.open("/docs-ui","_blank");
+  $("#btn-refresh").onclick = startRefresh;
+  document.querySelectorAll("[data-close]").forEach(b=>{
+    b.onclick = ()=> $("#"+b.dataset.close).classList.remove("on");
+  });
+  $("#kb-overlay").onclick = e =>{ if(e.target.id==="kb-overlay") e.target.classList.remove("on"); };
 
-  try{
-    const a = await (await fetch("/api/agents")).json();
-    AGENTS = a.agents;
-    $("#c-agents").textContent = `${AGENTS.length} specialists`;
-    renderAgents();
-  }catch(e){}
+  const ta = $("#q");
+  ta.addEventListener("input", ()=>{ ta.style.height="auto"; ta.style.height=Math.min(ta.scrollHeight,170)+"px"; });
+  ta.addEventListener("keydown", e =>{
+    if(e.key==="Enter" && !e.shiftKey){ e.preventDefault(); submit(); }
+  });
+  $("#form").onsubmit = e =>{ e.preventDefault(); submit(); };
 
-  await refreshHealth();
-  await refreshKB();
-  connectTrace();
-  sysMsg("Console ready. Every answer below is assembled from PostgreSQL rows only.");
+  connect();
+  await refreshKbChip();
 }
 
-function renderAgents(){
-  const box = $("#agents"); box.innerHTML = "";
-  AGENTS.forEach(a=>{
-    const d = el("div","agent"); d.id = "ag-" + a.name;
-    d.title = `${a.role}\n${a.summary}\n\nCapabilities: ${a.capabilities.join(", ")}\nProtocols: ${a.protocols.join(", ")}`;
-    const nm = el("div","nm");
-    const sw = el("span","swatch"); sw.style.background = a.accent;
-    nm.append(sw, el("span",null,a.name));
-    d.append(nm, el("div","role",a.role), el("div","state","idle"));
-    box.append(d);
+/* ============================================================== kb status */
+async function refreshKbChip(){
+  try{
+    const d = await (await fetch("/api/knowledge")).json();
+    const n = d.stats.phones || 0;
+    $("#kb-dot").className = "dot " + (d.running ? "busy" : n ? "ok" : "err");
+    $("#kb-label").textContent = d.running ? "refreshing…"
+      : n ? `${n} phones` : "empty — refresh to load";
+    if(!n && !d.running && !sessionStorage.getItem("kbPrompted")){
+      sessionStorage.setItem("kbPrompted","1");
+      openKb();
+    }
+    return d;
+  }catch(e){
+    $("#kb-dot").className="dot err"; $("#kb-label").textContent="offline";
+  }
+}
+
+async function openKb(){
+  $("#kb-overlay").classList.add("on");
+  const body = $("#kb-body"); body.innerHTML = "";
+  const d = await (await fetch("/api/knowledge")).json();
+  if(kbRunning) return;
+
+  if(!d.stats.phones){
+    body.append(bannerEl("The knowledge base is empty. Refresh it to scrape the "
+      + "most popular Samsung phones from GSMArena and store them in PostgreSQL."));
+  }else{
+    body.append(bannerEl(`${d.stats.phones} phones · ${d.stats.spec_rows} specification rows · `
+      + `${d.stats.spec_nulls} recorded as NULL · ${d.stats.chunks} searchable chunks`));
+    d.phones.forEach(p=>{
+      const r = el("div","kb-row added");
+      r.append(el("span","tick","✓"), el("span","nm",p.model_name),
+               el("span","st",p.series||""));
+      body.append(r);
+    });
+  }
+}
+
+function bannerEl(t){ return el("div","banner",t); }
+
+/* ============================================================== refresh */
+async function startRefresh(){
+  if(kbRunning) return;
+  const limit = parseInt($("#kb-limit").value,10);
+  const body = $("#kb-body");
+  body.innerHTML = "";
+  body.append(el("div","kb-phase","Knowledge Base Refresh"));
+  const bar = el("div","kb-bar"); bar.append(el("i")); body.append(bar);
+  const list = el("div"); body.append(list);
+
+  kbRunning = true;
+  $("#btn-refresh").disabled = true;
+  $("#btn-refresh").textContent = "Refreshing…";
+  $("#kb-dot").className = "dot busy";
+  $("#kb-label").textContent = "refreshing…";
+
+  window.__kb = {list, bar, total: limit, done: 0};
+
+  try{
+    const r = await fetch("/api/knowledge/refresh",{
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({limit})
+    });
+    if(r.status === 409){ list.append(el("div","kb-phase","A refresh is already running.")); endRefresh(); }
+    else if(!r.ok){ list.append(el("div","kb-phase","Could not start: HTTP "+r.status)); endRefresh(); }
+  }catch(e){
+    list.append(el("div","kb-phase","Could not start: "+e.message)); endRefresh();
+  }
+}
+
+function endRefresh(){
+  kbRunning = false;
+  $("#btn-refresh").disabled = false;
+  $("#btn-refresh").textContent = "Refresh knowledge base";
+  refreshKbChip();
+}
+
+function onKbEvent(ev){
+  const k = window.__kb; if(!k) return;
+  const d = ev.detail || {};
+  const phase = d.phase || ev.type.replace("kb.","");
+
+  if(phase === "catalogue"){
+    k.total = d.total || k.total;
+    k.list.append(el("div","kb-phase",
+      `Selected the top ${k.total} phones · source: ${d.source}`));
+    if(d.offline)
+      k.list.append(bannerEl("GSMArena denied access, so the locally saved pages "
+        + "in data/pages/ are being used instead. Same parser, same result."));
+    return;
+  }
+  if(phase === "phone"){
+    const key = "kbrow-" + (d.name||"").replace(/\W+/g,"");
+    let row = document.getElementById(key);
+    if(!row){
+      row = el("div","kb-row"); row.id = key;
+      row.append(el("span","ico"), el("span","nm",d.name), el("span","st"));
+      k.list.append(row);
+    }
+    row.className = "kb-row " + d.status;
+    const ico = row.querySelector(".ico"); ico.innerHTML = "";
+    if(d.status === "scraping"){
+      ico.append(el("span","spin"));
+      row.querySelector(".st").textContent = "Scraping…";
+    }else if(d.status === "added"){
+      ico.append(el("span","tick","✓"));
+      row.querySelector(".st").textContent =
+        `added · ${d.specs} specs · ${d.nulls} NULL`;
+      k.done++;
+      k.bar.querySelector("i").style.width = Math.round(k.done/k.total*100)+"%";
+    }else{
+      ico.append(el("span","cross","✕"));
+      row.querySelector(".st").textContent = "unavailable";
+    }
+    row.scrollIntoView({block:"nearest"});
+    return;
+  }
+  if(phase === "cleared" || phase === "discover" || phase === "indexing"){
+    k.list.append(el("div","kb-phase", ev.summary)); return;
+  }
+  if(phase === "indexed"){
+    k.list.append(el("div","kb-phase",
+      `Index ready · ${d.chunks} chunks embedded`)); return;
+  }
+  if(phase === "done"){
+    k.bar.querySelector("i").style.width = "100%";
+    k.list.append(el("div","kb-phase","✓ " + ev.summary));
+    k.list.append(el("div","kb-phase","You can now ask questions about these phones."));
+    endRefresh(); return;
+  }
+  if(phase === "error"){
+    k.list.append(el("div","kb-phase","✕ " + ev.summary)); endRefresh();
+  }
+}
+
+/* =============================================================== socket */
+function connect(){
+  const url = (location.protocol==="https:"?"wss://":"ws://") + location.host + "/ws/trace";
+  ws = new WebSocket(url);
+  ws.onmessage = e =>{
+    const m = JSON.parse(e.data);
+    if(m.type === "trace.ping" || m.type === "trace.hello") return;
+    if(m.type && m.type.startsWith("kb.")) return onKbEvent(m);
+    if(activeTurn) onAgentEvent(m);
+  };
+  ws.onclose = ()=> setTimeout(connect, 2000);
+}
+
+/* ============================================================== chat */
+function submit(){
+  const q = $("#q").value.trim();
+  if(!q || busy) return;
+  $("#q").value=""; $("#q").style.height="auto";
+  ask(q);
+}
+
+async function ask(question){
+  busy = true; $("#send").disabled = true;
+  const hero = $("#hero"); if(hero) hero.remove();
+
+  const thread = $("#thread");
+  const turn = el("div","turn");
+
+  const u = el("div","user-msg"); u.append(el("div",null,question));
+  turn.append(u);
+
+  const bot = el("div","bot");
+  bot.append(el("div","avatar","S"));
+  const body = el("div","bot-body");
+
+  const act = el("div","activity");
+  const head = el("div","act-head");
+  head.append(el("span","spin"), el("span",null,"Agents are working…"), el("span","chev","▾"));
+  head.onclick = ()=> act.classList.toggle("closed");
+  const list = el("div","act-list");
+  act.append(head, list);
+
+  const answer = el("div","answer");
+  body.append(act, answer);
+  bot.append(body); turn.append(bot); thread.append(turn);
+  scroll();
+
+  activeTurn = {list, head, steps:new Map()};
+
+  try{
+    const r = await fetch("/api/ask",{
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({question, session_key:"web"})
+    });
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    const d = await r.json();
+
+    finishSteps();
+    head.innerHTML = "";
+    head.append(el("span","tick","✓"),
+                el("span",null,`${activeTurn.steps.size} agents · ${Math.round(d.latency_ms)} ms`),
+                el("span","chev","▾"));
+    act.classList.add("closed");
+
+    answer.textContent = d.answer || "(no answer)";
+    if(d.extras && d.extras.ranking) answer.append(rankTable(d.extras.ranking));
+    body.append(metaRow(d));
+  }catch(err){
+    finishSteps();
+    head.innerHTML=""; head.append(el("span","cross","✕"), el("span",null,"Failed"));
+    answer.textContent = "Request failed: " + err.message;
+  }finally{
+    busy=false; $("#send").disabled=false; activeTurn=null; $("#q").focus(); scroll();
+  }
+}
+
+function onAgentEvent(e){
+  const t = activeTurn; if(!t) return;
+  if(e.type === "agent.start" && e.activity){
+    let step = t.steps.get(e.agent);
+    if(!step){
+      step = el("div","step running");
+      step.append(el("span","ico"), el("span","agent",e.agent), el("span","what"));
+      step.querySelector(".ico").append(el("span","spin"));
+      t.steps.set(e.agent, step);
+      t.list.append(step);
+    }else{
+      step.className = "step running";
+    }
+    step.querySelector(".what").textContent = e.activity;
+    scroll();
+  }
+  if(e.type === "agent.end" || e.type === "agent.error"){
+    const step = t.steps.get(e.agent); if(!step) return;
+    step.className = "step";
+    const ico = step.querySelector(".ico"); ico.innerHTML="";
+    ico.append(el("span", e.type==="agent.error" ? "cross":"tick",
+                  e.type==="agent.error" ? "✕":"✓"));
+  }
+}
+
+function finishSteps(){
+  activeTurn.steps.forEach(step=>{
+    if(step.classList.contains("running")){
+      step.className = "step";
+      const ico = step.querySelector(".ico"); ico.innerHTML="";
+      ico.append(el("span","tick","✓"));
+    }
   });
 }
 
-function setAgent(name, state){
-  const n = document.getElementById("ag-"+name);
-  if(!n) return;
-  n.classList.remove("active","done","error");
-  if(state) n.classList.add(state);
-  n.querySelector(".state").textContent =
-    state==="active" ? "working" : state==="done" ? "done" : state==="error" ? "error" : "idle";
-}
-function resetAgents(){ AGENTS.forEach(a=>setAgent(a.name,null)); }
-
-/* ------------------------------------------------------------- health */
-async function refreshHealth(){
-  try{
-    const h = await (await fetch("/api/health")).json();
-    $("#led-db").className = "led " + (h.database.ok ? "on" : "off");
-    $("#v-db").textContent = h.database.ok ? (h.database.database||"connected") : "down";
-    $("#led-llm").className = "led " + (h.llm.ok ? "on" : "off");
-    $("#v-llm").textContent = h.llm.model || "-";
-    $("#v-phones").textContent = h.corpus.phones ?? "-";
-    $("#v-chunks").textContent = h.corpus.chunks ?? "-";
-  }catch(e){
-    $("#led-db").className = "led off";
+function metaRow(d){
+  const m = el("div","meta");
+  if(d.intent) m.append(el("span","chip",d.intent));
+  if(d.pipeline && d.pipeline.length)
+    m.append(el("span","chip flow", d.pipeline.join(" → ")));
+  (d.devices||[]).forEach(x => m.append(el("span","chip",x)));
+  if(d.grounding){
+    const g = d.grounding;
+    const cls = g.verdict==="grounded" ? "ok" : g.verdict==="partially-grounded" ? "warn":"err";
+    const c = el("span","chip "+cls,
+      `${g.supported}/${g.numeric_claims} figures verified against PostgreSQL`);
+    if(g.unsupported && g.unsupported.length) c.title = "Unverified: "+g.unsupported.join(", ");
+    m.append(c);
   }
+  (d.unresolved||[]).forEach(u => m.append(el("span","chip err","not in database: "+u)));
+  return m;
 }
 
-async function refreshKB(){
-  try{
-    const h  = await (await fetch("/api/health")).json();
-    const c  = h.corpus, box = $("#kb"); box.innerHTML = "";
-    const rows = [
-      ["Devices loaded", c.phones],
-      ["Flagship models", c.flagships],
-      ["Specification rows", c.spec_rows],
-      ["Fields stored as NULL", c.spec_nulls],
-      ["Retrieval chunks", c.chunks],
-      ["Chunks embedded", c.embedded],
-      ["Embedding model", h.embedding.model.split("/").pop()],
-      ["Vector dimensions", h.embedding.dim],
-    ];
-    rows.forEach(([k,v])=>{
-      const d = el("div","stat"); d.append(el("span",null,k), el("span",null,String(v ?? "-")));
-      box.append(d);
-    });
-    $("#c-kb").textContent = c.last_scraped ? ("scraped " + String(c.last_scraped).slice(0,10)) : "";
-  }catch(e){}
-}
-
-/* -------------------------------------------------------- trace socket */
-function connectTrace(){
-  const url = (location.protocol==="https:"?"wss://":"ws://") + location.host + "/ws/trace";
-  const ws = new WebSocket(url);
-  ws.onopen = () => { $("#led-ws").className="led on"; $("#v-ws").textContent="live"; };
-  ws.onclose = () => {
-    $("#led-ws").className="led off"; $("#v-ws").textContent="reconnecting";
-    setTimeout(connectTrace, 2500);
-  };
-  ws.onmessage = ev => {
-    const e = JSON.parse(ev.data);
-    if(e.type === "trace.ping") return;
-    if(e.type === "trace.hello"){ (e.history||[]).slice(-14).forEach(onEvent); return; }
-    onEvent(e);
-  };
-}
-
-function onEvent(e){
-  // --- agent lifecycle
-  if(e.type === "agent.start")  setAgent(e.agent, "active");
-  if(e.type === "agent.end")    setAgent(e.agent, "done");
-  if(e.type === "agent.error")  setAgent(e.agent, "error");
-  if(e.type === "run.start")    { resetAgents(); clearFlow(); }
-
-  // --- agent-to-agent hand-offs
-  if(e.type === "acp.message" && e.agent && e.target) addHop(e);
-  if(e.type === "agent.finding") addFinding(e);
-
-  // --- protocol frames
-  if(e.protocol || e.channel === "system") addFrame(e);
-}
-
-function clearFlow(){ $("#flow").innerHTML = ""; }
-
-function addHop(e){
-  const box = $("#flow");
-  if(box.querySelector(".empty")) box.innerHTML = "";
-  const d = el("div","hop");
-  d.append(
-    el("span","who", e.agent),
-    (()=>{ const s = el("span","what"); s.textContent = "-> " + (e.detail?.intent || e.summary); return s; })(),
-    el("span","ms", e.target)
-  );
-  d.querySelector(".what").prepend(el("span","arrow",""));
-  box.append(d); box.scrollTop = box.scrollHeight;
-}
-
-function addFinding(e){
-  const box = $("#flow");
-  if(box.querySelector(".empty")) box.innerHTML = "";
-  const d = el("div","hop");
-  d.style.borderLeftColor = "var(--ok)";
-  d.append(el("span","who", e.agent),
-           el("span","what", e.summary),
-           el("span","ms", ""));
-  box.append(d); box.scrollTop = box.scrollHeight;
-}
-
-function addFrame(e){
-  const box = $("#proto");
-  if(box.querySelector(".empty")) box.innerHTML = "";
-  const cls = e.status === "error" ? "err" : (PROTO_CLASS[e.protocol] || "sys");
-  const f = el("div","frame " + cls);
-
-  const top = el("div","top");
-  top.append(el("span","pr", PROTO_SHORT[e.protocol] || (e.channel==="system" ? "SYSTEM" : "TRACE")));
-  top.append(el("span","txt", e.summary));
-  if(e.duration_ms != null) top.append(el("span","ms", e.duration_ms.toFixed(0)+"ms"));
-  f.append(top);
-
-  const sql = e.detail?.sql;
-  if(sql) f.append(el("div","sql", sql.length>340 ? sql.slice(0,340)+" ..." : sql));
-  else if(e.detail?.endpoint && e.protocol === "OLLAMA-HTTP/1.1")
-    f.append(el("div","sql", `POST ${e.detail.endpoint}  model=${e.detail.model}`));
-
-  box.append(f);
-  while(box.children.length > 160) box.removeChild(box.firstChild);
-  box.scrollTop = box.scrollHeight;
-  $("#c-frames").textContent = (++frameCount) + " frames";
-}
-
-/* --------------------------------------------------------------- chat */
-function bubble(cls, text){
-  const d = el("div","msg "+cls, text);
-  $("#chat").append(d); $("#chat").scrollTop = 1e9;
-  return d;
-}
-function sysMsg(t){ bubble("sys", t); }
-
-$("#form").addEventListener("submit", async ev=>{
-  ev.preventDefault();
-  const q = $("#q").value.trim();
-  if(!q || busy) return;
-  busy = true; $("#send").disabled = true; $("#q").value = "";
-
-  bubble("user", q);
-  const pending = bubble("bot", "Dispatching agents...");
-
-  try{
-    const r = await fetch("/api/ask", {
-      method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({question:q, session_key:"console"})
-    });
-    if(!r.ok) throw new Error("HTTP " + r.status);
-    const d = await r.json();
-
-    pending.textContent = d.answer || "(empty response)";
-    $("#c-intent").textContent = d.intent ? ("intent: " + d.intent) : "";
-
-    const m = el("div","meta");
-    m.append(el("span","tag", d.intent));
-    (d.pipeline||[]).length && m.append(el("span","tag", d.pipeline.join(" -> ")));
-    (d.devices||[]).forEach(x => m.append(el("span","tag", x)));
-    m.append(el("span","tag", Math.round(d.latency_ms) + " ms"));
-
-    if(d.grounding){
-      const g = d.grounding;
-      const cls = g.verdict === "grounded" ? "ok" : g.verdict === "partially-grounded" ? "warn" : "err";
-      const t = el("span","tag "+cls,
-        `${g.verdict}: ${g.supported}/${g.numeric_claims} figures traced to DB`);
-      t.title = g.unsupported?.length ? "Unverified: " + g.unsupported.join(", ") : "All figures matched database rows";
-      m.append(t);
-    }
-    (d.unresolved||[]).forEach(u => m.append(el("span","tag err", "not in DB: " + u)));
-    pending.append(m);
-
-    if(d.extras && d.extras.ranking) renderRanking(pending, d.extras.ranking);
-  }catch(err){
-    pending.textContent = "Request failed: " + err.message;
-  }finally{
-    busy = false; $("#send").disabled = false; $("#q").focus();
-    setTimeout(()=>AGENTS.forEach(a=>setAgent(a.name,null)), 2200);
-  }
-});
-
-function renderRanking(host, r){
-  const tbl = el("table");
-  const thead = el("thead");
-  const hr = el("tr");
-  ["#","Device", r.label + (r.unit ? ` (${r.unit})` : "")].forEach(h=>hr.append(el("th",null,h)));
-  thead.append(hr); tbl.append(thead);
+function rankTable(r){
+  const wrap = el("div");
+  const t = el("table","rank");
+  const thead = el("thead"), hr = el("tr");
+  ["#","Device", r.label + (r.unit?` (${r.unit})`:"")].forEach(h=>hr.append(el("th",null,h)));
+  thead.append(hr); t.append(thead);
   const tb = el("tbody");
   (r.rows||[]).forEach((row,i)=>{
     const tr = el("tr");
-    tr.append(el("td",null,String(i+1)), el("td",null,row.model_name));
-    tr.append(el("td","num", row.metric_value == null ? "-" : String(row.metric_value)));
+    tr.append(el("td",null,String(i+1)), el("td",null,row.model_name),
+              el("td","n", row.metric_value==null?"—":String(row.metric_value)));
     tb.append(tr);
   });
-  tbl.append(tb);
-  const wrap = el("div"); wrap.style.marginTop = "10px"; wrap.append(tbl);
+  t.append(tb); wrap.append(t);
   if(r.excluded_null_count)
-    wrap.append(el("div","null", `${r.excluded_null_count} device(s) excluded: value is NULL in the database.`));
-  host.append(wrap);
+    wrap.append(el("div","note",
+      `${r.excluded_null_count} phone(s) excluded — the source never published this value (NULL).`));
+  return wrap;
 }
+
+function scroll(){ const m = $("#main"); m.scrollTop = m.scrollHeight; }
 
 boot();
 </script>

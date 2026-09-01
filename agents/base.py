@@ -88,6 +88,16 @@ class Agent(ABC):
     def handle(self, msg: Envelope, ctx: AgentContext) -> Envelope:
         """Process one inbound envelope and return the reply."""
 
+    def activity(self, msg: Envelope, ctx: AgentContext) -> str:
+        """One plain sentence describing what this agent is about to do.
+
+        Shown live in the chat while the agent works, so the multi-agent flow
+        reads as "SPECTRA is fetching specifications for the Galaxy S25 Ultra"
+        rather than as an opaque spinner. Agents override this to name the
+        devices and metrics they were actually handed.
+        """
+        return f"{self.card.role} is working"
+
     # ------------------------------------------------------------------
     def run(self, msg: Envelope, ctx: AgentContext) -> Envelope:
         """Wrap `handle` with tracing, timing and error containment."""
@@ -103,11 +113,17 @@ class Agent(ABC):
                 "payload": _preview(msg.payload),
             },
         )
+        try:
+            activity = self.activity(msg, ctx)
+        except Exception:                       # never let a label break a run
+            activity = f"{self.card.role} is working"
+
         ctx.trace.agent(
             "agent.start",
             f"{self.name} ({self.card.role}) working",
             agent=self.name,
             status="pending",
+            activity=activity,
             detail={"role": self.card.role, "intent": msg.intent},
         )
 

@@ -57,7 +57,42 @@ def test_protocols_endpoint(api):
 def test_console_is_served(api):
     r = api.get("/")
     assert r.status_code == 200
-    assert "Samsung Phone Intelligence" in r.text
+    assert "Samsung Phone Assistant" in r.text
+
+
+def test_api_docs_page_is_served(api):
+    r = api.get("/docs-ui")
+    assert r.status_code == 200
+    assert "API Reference" in r.text
+    assert "Using Postman" in r.text
+
+
+def test_postman_collection_downloads(api):
+    r = api.get("/docs/postman_collection.json")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["info"]["name"] == "Samsung Phone Assistant"
+    # Every folder must carry at least one runnable request.
+    assert all(f["item"] for f in body["item"])
+
+
+# ------------------------------------------------------------- knowledge --
+def test_knowledge_reports_the_corpus(api):
+    d = api.get("/api/knowledge").json()
+    assert d["ready"] is True
+    assert d["stats"]["phones"] > 0
+    assert len(d["phones"]) == d["stats"]["phones"]
+    assert d["default_limit"] >= 1
+
+
+def test_refresh_validates_its_body(api):
+    assert api.post("/api/knowledge/refresh", json={"limit": 0}).status_code == 422
+    assert api.post("/api/knowledge/refresh", json={"limit": 5000}).status_code == 422
+
+
+def test_refresh_status_is_pollable(api):
+    d = api.get("/api/knowledge/refresh/status").json()
+    assert "running" in d and isinstance(d["events"], list)
 
 
 # ----------------------------------------------------------------- catalog
@@ -104,8 +139,11 @@ def test_ask_rejects_empty_question(api):
 
 @pytest.mark.llm
 def test_ask_returns_grounded_answer_with_trace(api, llm_ready):
+    # Ask about a device that is actually loaded -- the knowledge base holds
+    # whatever the last refresh selected, not a fixed list.
+    loaded = api.get("/api/phones").json()["phones"][0]["model_name"]
     r = api.post("/api/ask", json={
-        "question": "What is the battery capacity of the Galaxy S23?",
+        "question": f"What is the battery capacity of the {loaded}?",
         "session_key": "pytest",
     })
     assert r.status_code == 200
@@ -125,7 +163,7 @@ def test_ask_returns_grounded_answer_with_trace(api, llm_ready):
 
 @pytest.mark.llm
 def test_conversation_is_persisted(api, llm_ready):
-    api.post("/api/ask", json={"question": "Screen size of the Galaxy S23?",
+    api.post("/api/ask", json={"question": "How many phones do you know about?",
                                "session_key": "pytest-history"})
     d = api.get("/api/history?session_key=pytest-history").json()
     roles = [m["role"] for m in d["messages"]]

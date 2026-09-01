@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from agents.prompts import CRITIC_REVIEW
 from agents.base import Agent, AgentCard, AgentContext, Envelope
 from backend.core.logging_setup import get_logger
 from database import engine
@@ -19,20 +20,6 @@ from backend.llm.ollama_client import LLMUnavailable, client
 
 log = get_logger("agents.critic")
 
-SYSTEM = (
-    "You are CRITIC, a reviewer in a Samsung phone advisory system. You are given "
-    "a device's specification sheet from a PostgreSQL database and its standing "
-    "against the rest of the catalogue.\n"
-    "Rules:\n"
-    "- Use ONLY the supplied figures. Never invent a specification, price, or score.\n"
-    "- Where a field says NOT PUBLISHED, say the data is unavailable. Do not guess.\n"
-    "- Base every judgement on the supplied catalogue standings, not outside knowledge.\n"
-    "- Do not mention competitors from other brands; the database holds Samsung only.\n"
-    "- The 'Gaps in the data' section must list ONLY the fields named in the "
-    "FIELDS WITH NO DATA block. Never claim a field is missing if it is not in "
-    "that block, and never claim one is present if it is.\n"
-    "- Write plainly. No marketing copy, no invented user quotes."
-)
 
 # Fields worth reporting as a data gap when they are NULL, with readable names.
 GAP_FIELDS: list[tuple[str, str]] = [
@@ -85,6 +72,12 @@ class CriticAgent(Agent):
         uses_llm=True,
     )
 
+
+    def activity(self, msg: Envelope, ctx: AgentContext) -> str:
+        sheets = msg.payload.get("sheets") or []
+        name = sheets[0]["phone"]["model_name"] if sheets else "this device"
+        return f"Writing a review of {name} against the rest of the catalogue"
+
     def handle(self, msg: Envelope, ctx: AgentContext) -> Envelope:
         sheets: list[dict[str, Any]] = msg.payload.get("sheets") or []
         rendered: list[str] = msg.payload.get("rendered") or []
@@ -102,11 +95,16 @@ class CriticAgent(Agent):
         standings = self._standings(phone, ctx)
         gaps = self._gaps(phone)
 
+        # Standings for a NULL metric carry a note instead of a rank, so read
+        # the population from the first entry that actually has one.
+        ranked = [s for s in standings if s.get("population")]
+        population = ranked[0]["population"] if ranked else 0
+
         ctx.trace.agent(
             "agent.finding",
-            f"positioned {phone['model_name']} on {len(standings)} metric(s) "
-            f"against the {standings[0]['population'] if standings else 0}-device "
-            f"catalogue; {len(gaps)} reportable data gap(s)",
+            f"positioned {phone['model_name']} on {len(ranked)} metric(s) "
+            f"against the {population}-device catalogue; "
+            f"{len(gaps)} reportable data gap(s)",
             agent=self.name,
             detail={"standings": standings, "gaps": gaps},
         )
@@ -129,7 +127,7 @@ class CriticAgent(Agent):
         )
         try:
             answer = client().generate(
-                prompt, system=SYSTEM, trace=ctx.trace, agent=self.name,
+                prompt, system=CRITIC_REVIEW.text, trace=ctx.trace, agent=self.name,
                 purpose="review generation", max_tokens=850,
             ).text
         except LLMUnavailable as exc:

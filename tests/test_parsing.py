@@ -21,7 +21,7 @@ def saved_pages() -> list:
 def pages():
     files = saved_pages()
     if not files:
-        pytest.skip("no scraped pages on disk; run scripts.scrape_pages first")
+        pytest.skip("no saved pages on disk; run python -m scripts.refresh")
     return files
 
 
@@ -115,10 +115,34 @@ def test_budget_phone_has_genuine_nulls():
 
 
 # ------------------------------------------------------------------ catalog
-def test_catalog_covers_all_flagship_lines():
+def test_catalog_is_well_formed():
+    """The catalogue holds whatever the last refresh selected, so assert on
+    structure and ordering rather than a fixed size."""
     if not settings.paths.catalog.exists():
         pytest.skip("catalog not built")
     entries = catalog.load()
+    assert entries
+    assert len({e.slug for e in entries}) == len(entries), "duplicate slugs"
+    ranks = [e.popularity_rank for e in entries]
+    assert ranks == sorted(ranks), "catalogue is not ordered by popularity"
+    for e in entries:
+        assert e.selected_reason, f"{e.short_name} has no selection reason"
+        assert e.url.startswith("https://www.gsmarena.com/")
+
+
+def test_full_catalog_covers_every_flagship_line():
+    """The 30-device selection must reach every major flagship family."""
+    from scraper.fetcher import PageFetcher
+
+    fetcher = PageFetcher(offline=True)
+    try:
+        entries = catalog.select(catalog.discover(fetcher),
+                                 target=settings.scraper.target_count)
+    except Exception as exc:
+        pytest.skip(f"cannot rebuild the catalogue offline: {exc}")
+    finally:
+        fetcher.close()
+
     assert len(entries) == settings.scraper.target_count
 
     series = {e.series for e in entries}
@@ -131,6 +155,22 @@ def test_catalog_covers_all_flagship_lines():
 
     variants = {e.variant for e in entries if e.series == "Galaxy S"}
     assert {"base", "Ultra"}.issubset(variants)
+
+
+def test_demo_selection_is_all_flagships():
+    """With only 10 slots the quotas must spend them on flagships."""
+    from scraper.fetcher import PageFetcher
+
+    fetcher = PageFetcher(offline=True)
+    try:
+        entries = catalog.select(catalog.discover(fetcher), target=10)
+    except Exception as exc:
+        pytest.skip(f"cannot rebuild the catalogue offline: {exc}")
+    finally:
+        fetcher.close()
+
+    assert len(entries) == 10
+    assert all(e.is_flagship for e in entries),         [e.short_name for e in entries if not e.is_flagship]
 
 
 def test_catalog_excludes_non_phones():

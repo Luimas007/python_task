@@ -35,9 +35,6 @@ class Hit:
     lexical_score: float
     score: float
 
-    def cite(self) -> str:
-        return f"[{self.model_name or 'unknown'} :: {self.section}]"
-
 
 HYBRID_SQL = """
 WITH scored AS (

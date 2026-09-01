@@ -54,10 +54,10 @@ def test_only_designated_agents_touch_the_llm():
 
 # ------------------------------------------------------------------- ATLAS
 @pytest.mark.parametrize("question,expected", [
-    ("What are the camera specs of the Galaxy S23?", "spec_lookup"),
-    ("How does the Galaxy S23 compare to the S22?", "compare"),
+    ("What are the camera specs of the Galaxy S25 Ultra?", "spec_lookup"),
+    ("How does the Galaxy S25 Ultra compare to the S24 Ultra?", "compare"),
     ("Which Samsung phone has the best battery life?", "ranking"),
-    ("Write a review of the Galaxy S24 Ultra", "review"),
+    ("Write a review of the Galaxy S25 Ultra", "review"),
 ])
 def test_atlas_classifies_intent(question, expected):
     ctx = AgentContext(trace=RunTrace(), question=question)
@@ -91,9 +91,7 @@ def test_atlas_flips_direction_for_lowest():
 def test_spectra_returns_a_sheet_and_marks_nulls():
     from database import repository as repo
 
-    target = repo.resolve_phone("Galaxy S23")
-    if not target:
-        pytest.skip("S23 not in corpus")
+    target = repo.list_phones()[0]
     ctx = AgentContext(trace=RunTrace(), question="specs")
     reply = orchestrator().spectra.run(
         Envelope("TEST", "SPECTRA", "fetch.specs",
@@ -101,7 +99,7 @@ def test_spectra_returns_a_sheet_and_marks_nulls():
     )
     assert reply.payload["sheets"]
     rendered = reply.payload["rendered"][0]
-    assert "Samsung Galaxy S23" in rendered
+    assert target["model_name"] in rendered
     # Missing facts must be labelled, not silently dropped.
     assert "NOT PUBLISHED" in rendered or reply.payload["null_fields"] == 0
 
@@ -146,20 +144,29 @@ def test_sentinel_ignores_years_and_list_markers():
 # ------------------------------------------------------------ full journey
 @pytest.mark.llm
 def test_spec_lookup_end_to_end(llm_ready):
+    from database import repository as repo
+
+    loaded = repo.list_phones()[0]["model_name"]
     r = orchestrator().answer(
-        "What are the camera specs of the Samsung Galaxy S23?", RunTrace()
+        f"What are the camera specs of the {loaded}?", RunTrace()
     )
     assert r["intent"] == "spec_lookup"
     assert "SPECTRA" in r["agents_used"]
-    assert "Samsung Galaxy S23" in r["devices"]
+    assert loaded in r["devices"]
     assert len(r["answer"]) > 40
     assert r["grounding"]["verdict"] in ("grounded", "partially-grounded")
 
 
 @pytest.mark.llm
 def test_comparison_end_to_end(llm_ready):
+    from database import repository as repo
+
+    phones = repo.list_phones()
+    if len(phones) < 2:
+        pytest.skip("need two phones to compare")
+    a, b = phones[0]["model_name"], phones[1]["model_name"]
     r = orchestrator().answer(
-        "How does the Galaxy S23 compare to the S22 in terms of performance?",
+        f"How does the {a} compare to the {b} in terms of performance?",
         RunTrace(),
     )
     assert r["intent"] == "compare"
@@ -180,7 +187,10 @@ def test_ranking_end_to_end(llm_ready):
 
 @pytest.mark.llm
 def test_review_end_to_end(llm_ready):
-    r = orchestrator().answer("Write a review of the Galaxy S24 Ultra", RunTrace())
+    from database import repository as repo
+
+    loaded = repo.list_phones()[0]["model_name"]
+    r = orchestrator().answer(f"Write a review of the {loaded}", RunTrace())
     assert r["intent"] == "review"
     assert "CRITIC" in r["agents_used"]
     assert len(r["answer"]) > 200

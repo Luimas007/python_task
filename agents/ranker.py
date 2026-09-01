@@ -34,6 +34,12 @@ class RankerAgent(Agent):
         uses_llm=False,
     )
 
+
+    def activity(self, msg: Envelope, ctx: AgentContext) -> str:
+        metric = msg.payload.get("metric") or DEFAULT_METRIC
+        label = repo.RANKABLE.get(metric, {}).get("label", metric)
+        return f"Ranking every phone in the database by {label}"
+
     def handle(self, msg: Envelope, ctx: AgentContext) -> Envelope:
         column = msg.payload.get("metric") or DEFAULT_METRIC
         if column not in repo.RANKABLE:

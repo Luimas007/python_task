@@ -7,7 +7,20 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-ROOT = Path(__file__).resolve().parent.parent
+def _project_root() -> Path:
+    """Walk up from this file until the directory holding app.py is found.
+
+    Anchoring on a marker rather than a fixed number of `.parent` hops means
+    moving this module between packages cannot silently repoint data/ and logs/.
+    """
+    here = Path(__file__).resolve()
+    for candidate in here.parents:
+        if (candidate / "app.py").exists():
+            return candidate
+    return here.parents[2]
+
+
+ROOT = _project_root()
 load_dotenv(ROOT / ".env")
 
 
@@ -49,13 +62,6 @@ class PostgresSettings:
         )
 
     @property
-    def sqlalchemy_url(self) -> str:
-        return (
-            f"postgresql+psycopg2://{self.user}:{self.password}"
-            f"@{self.host}:{self.port}/{self.database}"
-        )
-
-    @property
     def endpoint(self) -> str:
         return f"{self.host}:{self.port}/{self.database}"
 
@@ -63,6 +69,8 @@ class PostgresSettings:
 @dataclass(frozen=True)
 class ScraperSettings:
     target_count: int = _int("SCRAPE_TARGET_COUNT", 30)
+    # Phones loaded by the one-click refresh in the console.
+    demo_count: int = _int("SCRAPE_DEMO_COUNT", 10)
     delay_seconds: float = _float("SCRAPE_DELAY_SECONDS", 2.5)
     impersonate: str = os.getenv("SCRAPE_IMPERSONATE", "chrome")
     timeout: int = _int("SCRAPE_TIMEOUT", 40)
@@ -107,13 +115,11 @@ class Paths:
     root: Path = ROOT
     data: Path = ROOT / "data"
     pages: Path = ROOT / "data" / "pages"
-    raw: Path = ROOT / "data" / "raw"
     logs: Path = ROOT / "logs"
     catalog: Path = ROOT / "data" / "catalog.json"
-    extracted: Path = ROOT / "data" / "extracted.json"
 
     def ensure(self) -> None:
-        for p in (self.data, self.pages, self.raw, self.logs):
+        for p in (self.data, self.pages, self.logs):
             p.mkdir(parents=True, exist_ok=True)
 
 

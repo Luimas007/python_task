@@ -13,6 +13,7 @@ import time
 from typing import Any
 
 from agents.atlas import AtlasAgent
+from agents.prompts import NEXUS_SYNTHESIS
 from agents.base import Agent, AgentCard, AgentContext, Envelope
 from agents.critic import CriticAgent
 from agents.oracle import OracleAgent
@@ -28,18 +29,6 @@ from backend.llm.ollama_client import LLMUnavailable, client
 
 log = get_logger("agents.nexus")
 
-SYNTH_SYSTEM = (
-    "You are the answering voice of a Samsung phone advisory system. Everything "
-    "you know arrives in the CONTEXT block below, retrieved from a PostgreSQL "
-    "database.\n"
-    "Rules:\n"
-    "- Answer ONLY from the CONTEXT. If it does not contain the answer, say so plainly.\n"
-    "- Never introduce a specification, price, or score that is not in the CONTEXT.\n"
-    "- 'NOT PUBLISHED' or 'not published by the source' means the data is genuinely "
-    "unavailable; report that rather than estimating.\n"
-    "- Quote concrete figures with their units.\n"
-    "- Be direct and concise. No preamble, no marketing language."
-)
 
 # Which category subset SPECTRA should pull, by topic in the question.
 FOCUS_KEYWORDS: list[tuple[str, str]] = [
@@ -120,20 +109,38 @@ class NexusAgent(Agent):
         direction = analysis.payload.get("direction")
         unresolved = analysis.payload.get("unresolved_mentions", [])
 
-        plan = self._plan(intent)
-        trace.system(
-            "run.plan",
-            f"intent={intent} -> pipeline: {' -> '.join(plan)}",
-            agent=self.name,
-            detail={"intent": intent, "pipeline": plan,
-                    "devices": [p["model_name"] for p in phones]},
-        )
-
         agents_used = ["NEXUS", "ATLAS"]
         answer, extras = "", {}
 
+        # Every branch below needs devices that actually exist in the database.
+        # When ATLAS resolved none, the run falls through to the general path --
+        # so report the intent that *ran*, not the one that was hoped for.
+        # Otherwise the response claims `spec_lookup` while listing the general
+        # pipeline's agents.
+        effective_intent = intent
+        if (intent == "compare" and len(phone_ids) < 2) or (
+            intent in ("review", "spec_lookup") and not phone_ids
+        ):
+            effective_intent = "general"
+            trace.system(
+                "run.downgrade",
+                f"no device from the database matched, so the {intent} pipeline "
+                "cannot run; answering from semantic search instead",
+                agent=self.name,
+                detail={"requested_intent": intent, "effective_intent": "general"},
+            )
+
+        plan = self._plan(effective_intent)
+        trace.system(
+            "run.plan",
+            f"intent={effective_intent} -> pipeline: {' -> '.join(plan)}",
+            agent=self.name,
+            detail={"intent": effective_intent, "pipeline": plan,
+                    "devices": [p["model_name"] for p in phones]},
+        )
+
         # ---- 2. dispatch --------------------------------------------------
-        if intent == "compare" and len(phone_ids) >= 2:
+        if effective_intent == "compare" and len(phone_ids) >= 2:
             specs = self.spectra.run(
                 Envelope(self.name, "SPECTRA", "fetch.specs",
                          {"phone_ids": phone_ids, "focus": self._focus(question)}), ctx
@@ -151,7 +158,7 @@ class NexusAgent(Agent):
             extras = {"deltas": result.payload.get("deltas", []),
                       "table": result.payload.get("table")}
 
-        elif intent == "review" and phone_ids:
+        elif effective_intent == "review" and phone_ids:
             specs = self.spectra.run(
                 Envelope(self.name, "SPECTRA", "fetch.specs",
                          {"phone_ids": phone_ids[:1]}), ctx
@@ -168,7 +175,7 @@ class NexusAgent(Agent):
             answer = result.payload.get("answer", "")
             extras = {"standings": result.payload.get("standings", [])}
 
-        elif intent == "ranking":
+        elif effective_intent == "ranking":
             result = self.ranker.run(
                 Envelope(self.name, "RANKER", "rank.devices", {
                     "metric": metric, "direction": direction, "limit": 8,
@@ -179,7 +186,7 @@ class NexusAgent(Agent):
             answer = self._synthesise(question, ranking_text, ctx)
             extras = {"ranking": result.payload.get("ranking")}
 
-        elif intent == "spec_lookup" and phone_ids:
+        elif effective_intent == "spec_lookup" and phone_ids:
             focus = self._focus(question)
             specs = self.spectra.run(
                 Envelope(self.name, "SPECTRA", "fetch.specs",
@@ -243,7 +250,8 @@ class NexusAgent(Agent):
 
         return {
             "answer": answer,
-            "intent": intent,
+            "intent": effective_intent,
+            "requested_intent": intent,
             "agents_used": agents_used,
             "pipeline": plan,
             "devices": [p["model_name"] for p in phones],
@@ -275,6 +283,17 @@ class NexusAgent(Agent):
     def _synthesise(self, question: str, context: str, ctx: AgentContext) -> str:
         if not context.strip():
             return "The database returned no rows for that question."
+
+        # NEXUS composes in-line rather than through Agent.run, so it announces
+        # its own step to keep the activity feed complete.
+        ctx.trace.agent(
+            "agent.start",
+            "NEXUS (Orchestrator) composing the answer",
+            agent=self.name,
+            status="pending",
+            activity="Preparing the final response",
+            detail={"context_chars": len(context)},
+        )
         prompt = (
             f"=== CONTEXT (retrieved from PostgreSQL) ===\n{context[:7000]}\n\n"
             f"=== QUESTION ===\n{question}\n\n"
@@ -282,9 +301,11 @@ class NexusAgent(Agent):
         )
         try:
             comp = client().generate(
-                prompt, system=SYNTH_SYSTEM, trace=ctx.trace, agent=self.name,
+                prompt, system=NEXUS_SYNTHESIS.text, trace=ctx.trace, agent=self.name,
                 purpose="answer synthesis", max_tokens=700,
             )
+            ctx.trace.agent("agent.end", "NEXUS composed the answer",
+                            agent=self.name, detail={"chars": len(comp.text)})
             return comp.text
         except LLMUnavailable as exc:
             ctx.trace.system(
@@ -292,6 +313,8 @@ class NexusAgent(Agent):
                 f"local model unreachable; returning raw database rows ({exc})",
                 agent=self.name, status="error",
             )
+            ctx.trace.agent("agent.end", "NEXUS returned raw rows (no LLM)",
+                            agent=self.name, status="error")
             return (
                 "The local language model is unreachable, so here are the raw "
                 f"database rows for your question:\n\n{context[:2500]}"
