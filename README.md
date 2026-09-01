@@ -8,9 +8,7 @@ using nothing but a local PostgreSQL database it built itself.**
 Scrapes GSMArena · stores in PostgreSQL · retrieves with RAG ·
 reasons with eight named agents · checks its own answers
 
-```bash
-python app.py
-```
+
 
 </div>
 
