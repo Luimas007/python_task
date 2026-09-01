@@ -79,6 +79,12 @@ async def api_docs() -> FileResponse:
     return FileResponse(FRONTEND / "docs.html")
 
 
+@app.get("/setup", include_in_schema=False)
+async def setup_guide() -> FileResponse:
+    """Install guide with per-OS commands. Also openable straight off disk."""
+    return FileResponse(ROOT / "docs" / "SETUP.html")
+
+
 @app.get("/docs/postman_collection.json", include_in_schema=False)
 async def postman_collection() -> FileResponse:
     """Importable Postman collection covering every endpoint."""

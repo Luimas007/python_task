@@ -25,7 +25,7 @@ python app.py
 | **[Scraping](#scraping-workflow)** · [Knowledge base](#knowledge-base-workflow) · [PostgreSQL](#postgresql-architecture) | Where the data comes from |
 | **[API](#api-architecture)** · [Frontend](#frontend-architecture) | The surfaces |
 | **[Example query](#example-query-workflow)** · [Agent communication](#agent-communication-flow) | Walkthroughs |
-| **[Folder structure](#project-folder-structure)** · [Install](#installation) · [Usage](#using-the-chat-interface) | Reference |
+| **[Folder structure](#project-folder-structure)** · [Install on any PC](#installation-on-any-pc) · [Usage](#using-the-chat-interface) | Reference |
 | **[Postman](#testing-the-api-with-postman)** · [Troubleshooting](#troubleshooting) | Demo and repair |
 
 ---
@@ -105,6 +105,11 @@ invented number has no matching row and gets flagged.
 ---
 
 ## Quick start
+
+*Already have Python, PostgreSQL and Ollama? This is the five-minute version.
+Starting from a clean machine, use
+**[Installation on any PC](#installation-on-any-pc)** instead — every command for
+Windows and Linux, Anaconda and venv, with nothing assumed.*
 
 ### Requirements
 
@@ -755,9 +760,340 @@ py_task/
 
 ---
 
-## Installation
+## Installation on any PC
 
-See [Quick start](#quick-start). Two notes on the environment:
+Written for someone who has never seen this project before. Follow it top to
+bottom and it works. Budget 15 minutes, nearly all of it downloading.
+
+> ### 📋 Want copy buttons?
+>
+> Open **[`docs/SETUP.html`](docs/SETUP.html)** — **double-click the file**, no
+> server and no internet needed. Same instructions, but with **Windows / Linux**
+> and **Anaconda / venv** tabs so you only see *your* four commands, and a
+> **Copy** button on every one of them.
+>
+> On GitHub, every code block below already has a copy button in its top-right
+> corner — hover over one.
+
+### Step 0 · Install these four things first
+
+| Software | Version | Verify with | Get it from |
+|---|---|---|---|
+| **Python** | 3.10 or 3.11 | `python --version` | [python.org](https://www.python.org/downloads/) — or skip it, Anaconda includes Python |
+| **PostgreSQL** | 14 or newer | `psql --version` | [postgresql.org/download](https://www.postgresql.org/download/) |
+| **Ollama** | any | `ollama --version` | [ollama.com/download](https://ollama.com/download) |
+| **Git** | any | `git --version` | [git-scm.com](https://git-scm.com/downloads) |
+
+> **On Windows**, tick **"Add Python to PATH"** in the Python installer, and
+> write down the password you set for the `postgres` user during the PostgreSQL
+> install — you need it in Step 3.
+>
+> **Anaconda users** can skip the Python download entirely.
+
+You need about **6 GB of disk** (PyTorch is ~2 GB, the language model ~2 GB) and
+**8 GB of RAM**. A GPU is optional — everything runs on CPU, just slower.
+
+---
+
+### Step 1 · Get the code
+
+```bash
+git clone <this-repo-url> py_task
+cd py_task
+```
+
+No Git? Download the ZIP, extract it, and `cd` into the folder.
+
+> **Check `data/pages/` contains ~30 `.html` files.** These are the saved
+> GSMArena pages the scraper falls back to. GSMArena blocks unfamiliar IP
+> addresses, so on most machines these files *are* the data source. Without them
+> there is nothing to build a knowledge base from.
+
+---
+
+### Step 2 · Create the environment
+
+Pick **one** of the two columns. Anaconda is the safer choice on Windows.
+
+#### 🅰 Anaconda / Miniconda
+
+**Windows** — use the *Anaconda Prompt*, not PowerShell:
+
+```bat
+conda create -n samsung_phone_system python=3.10 -y
+conda activate samsung_phone_system
+```
+
+**Linux / macOS:**
+
+```bash
+conda create -n samsung_phone_system python=3.10 -y
+conda activate samsung_phone_system
+```
+
+#### 🅱 Plain Python + venv
+
+**Windows (PowerShell):**
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+
+<details>
+<summary>PowerShell says <code>running scripts is disabled on this system</code></summary>
+
+Run this once, then activate again:
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+```
+
+Or sidestep it with the classic Command Prompt: `.venv\Scripts\activate.bat`
+</details>
+
+**Linux / macOS:**
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+**You are in the environment when the prompt starts with**
+`(samsung_phone_system)` **or** `(.venv)`. Every later command assumes that.
+
+---
+
+### Step 3 · Install the Python packages
+
+**Windows** (the default wheels are already CPU-only):
+
+```bash
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+**Linux / macOS** — install PyTorch from the CPU index first, or pip downloads
+2.5 GB of CUDA libraries this project never uses:
+
+```bash
+python -m pip install --upgrade pip
+pip install torch==2.13.0 --index-url https://download.pytorch.org/whl/cpu
+pip install -r requirements.txt
+```
+
+This is the slow step: 5–10 minutes.
+
+---
+
+### Step 4 · Start PostgreSQL and know your password
+
+**Windows** — the installer already registered a service. Confirm it is running:
+
+```powershell
+Get-Service -Name postgresql*
+```
+
+If `Status` is `Stopped`:
+
+```powershell
+Start-Service postgresql-x64-18
+```
+
+**Linux (Debian / Ubuntu):**
+
+```bash
+sudo apt install -y postgresql
+sudo systemctl enable --now postgresql
+sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'postgres';"
+```
+
+**macOS (Homebrew):**
+
+```bash
+brew install postgresql@16
+brew services start postgresql@16
+```
+
+You do **not** create the database by hand — Step 6 does it. The `postgres` role
+just needs `CREATEDB`, which it has by default.
+
+---
+
+### Step 5 · Write your `.env`
+
+Copy the template, then put your real PostgreSQL password in it.
+
+**Windows (PowerShell):**
+
+```powershell
+Copy-Item .env.example .env
+notepad .env
+```
+
+**Linux / macOS:**
+
+```bash
+cp .env.example .env
+nano .env
+```
+
+**One line matters.** Change `PG_PASSWORD` to the password from Step 4 and save:
+
+```ini
+PG_PASSWORD=your_password_here
+```
+
+Every other setting has a working default. `.env` is gitignored, so your
+password never leaves your machine.
+
+---
+
+### Step 6 · Create the database tables
+
+```bash
+python -m scripts.setup_db
+```
+
+```
+INFO | database CREATED
+INFO | connected: PostgreSQL 18.6 (localhost:5432/samsung_kb)
+INFO |   table phones               23 columns
+INFO |   table specifications        8 columns
+INFO |   cosine_similarity(self) = 1.0000 (expect 1.0)
+INFO | setup_db complete
+```
+
+Safe to re-run — it is idempotent.
+
+---
+
+### Step 7 · Download the language model
+
+```bash
+ollama pull llama3.2:3b
+```
+
+Roughly 2 GB. Leave `ollama serve` running in its own terminal if it did not
+start on its own.
+
+> **Skipping this is allowed.** Without Ollama the app still starts and still
+> answers from PostgreSQL — you get spec tables and rankings instead of prose,
+> and the header shows `degraded`. Nothing is ever invented either way.
+
+---
+
+### Step 8 · Run it
+
+```bash
+python app.py
+```
+
+The first run finds an empty knowledge base and fills it from `data/pages/`
+automatically, then opens your browser on <http://127.0.0.1:8000>.
+
+```
+[1/4] PostgreSQL       PostgreSQL 18.6, connected to localhost:5432/samsung_kb
+[2/4] local LLM        llama3.2:3b ready
+[3/4] knowledge base   10 phones, 237 chunks, 237 embedded
+[4/4] embedding model  all-MiniLM-L6-v2 (384-dim, cpu)
+
+ready in 11.0s
+  console   http://127.0.0.1:8000
+  API docs  http://127.0.0.1:8000/docs-ui
+```
+
+Ask it *"Which Samsung phone has the best battery life?"* and watch the agents
+work.
+
+---
+
+### The whole thing as one paste
+
+Everything above, minus the installers. Run from inside the project folder.
+
+**Windows · Anaconda Prompt**
+
+```bat
+conda create -n samsung_phone_system python=3.10 -y && conda activate samsung_phone_system
+python -m pip install --upgrade pip && pip install -r requirements.txt
+copy .env.example .env && notepad .env
+python -m scripts.setup_db
+ollama pull llama3.2:3b
+python app.py
+```
+
+**Windows · PowerShell + venv**
+
+```powershell
+python -m venv .venv; .\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip; pip install -r requirements.txt
+Copy-Item .env.example .env; notepad .env
+python -m scripts.setup_db
+ollama pull llama3.2:3b
+python app.py
+```
+
+**Linux / macOS · Anaconda**
+
+```bash
+conda create -n samsung_phone_system python=3.10 -y && conda activate samsung_phone_system
+python -m pip install --upgrade pip
+pip install torch==2.13.0 --index-url https://download.pytorch.org/whl/cpu
+pip install -r requirements.txt
+cp .env.example .env && nano .env
+python -m scripts.setup_db
+ollama pull llama3.2:3b
+python app.py
+```
+
+**Linux / macOS · venv**
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install torch==2.13.0 --index-url https://download.pytorch.org/whl/cpu
+pip install -r requirements.txt
+cp .env.example .env && nano .env
+python -m scripts.setup_db
+ollama pull llama3.2:3b
+python app.py
+```
+
+---
+
+### Did it work?
+
+```bash
+python app.py --check          # every dependency, then exit
+python -m scripts.report       # what the database holds
+python -m scripts.db_browser   # the raw tables, in a browser
+pytest -q                      # the full test suite
+```
+
+`--check` is the one to run when something is wrong: it names the broken
+dependency instead of making you guess.
+
+---
+
+### When it does not work
+
+| What you see | What it means | What to do |
+|---|---|---|
+| `'python' is not recognized` | Python is not on PATH | Reinstall with **"Add Python to PATH"** ticked, or use the Anaconda Prompt |
+| `'conda' is not recognized` | Wrong terminal | Use **Anaconda Prompt** on Windows; `source ~/miniconda3/bin/activate` on Linux |
+| `running scripts is disabled on this system` | PowerShell policy | `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned`, then activate again |
+| `STARTUP FAILED: cannot reach PostgreSQL` | Server down, or wrong password | Step 4, then fix `PG_PASSWORD` in `.env` |
+| `password authentication failed for user "postgres"` | `.env` disagrees with the server | Reset it: `sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'postgres';"` |
+| `permission denied to create database` | Role lacks `CREATEDB` | `sudo -u postgres psql -c "ALTER USER postgres CREATEDB;"` |
+| `pg_config executable not found` | Building psycopg2 from source | You want the wheel: `pip install psycopg2-binary` |
+| `LLM unavailable` at startup | Ollama not running | `ollama serve` in another terminal. Optional — the app works without it |
+| Download stalls at `torch` | Pulling CUDA wheels | Use the CPU index URL from Step 3 |
+| `port already in use` | Something else is on 8000 | `python app.py --port 8001` |
+| `knowledge base is empty` | `data/pages/` did not come with the clone | Confirm it holds ~30 `.html` files, then `python app.py --rebuild` |
+| Browser does not open | Headless or remote box | Open <http://127.0.0.1:8000> yourself, or pass `--no-browser` |
+
+### Two notes on the environment
 
 **PostgreSQL.** Any 14+ server works. pgvector is *not* needed — similarity is a
 plain SQL function. The role needs `CREATEDB` the first time.

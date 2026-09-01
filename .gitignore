@@ -10,5 +10,7 @@ venv/
 logs/*.log
 logs/*.png
 
-# scraped source pages are large; keep the directory, not the contents
-data/pages/*.html
+# The scraped source pages ARE committed (~1.6 MB for 30 files). GSMArena
+# blocks unfamiliar IPs, so without them a fresh clone has nothing to fall back
+# to and cannot build a knowledge base at all. They are the offline source of
+# truth -- see "When GSMArena says no".
