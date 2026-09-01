@@ -795,8 +795,14 @@ append instead.
 To see what landed:
 
 ```bash
-python -m scripts.report
+python -m scripts.report        # a coverage summary in the terminal
+python -m scripts.db_browser    # the raw tables, in a browser
 ```
+
+`db_browser` opens a read-only viewer on <http://127.0.0.1:8010> listing every
+table with its row count. Click through to page the rows — useful for pointing
+at `specifications` and showing that unpublished facts really are stored as
+`NULL`.
 
 ---
 
