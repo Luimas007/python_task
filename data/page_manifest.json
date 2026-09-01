@@ -1,0 +1,236 @@
+{
+  "pages": [
+    {
+      "slug": "samsung_galaxy_s26_fe_5g-14870",
+      "short_name": "Galaxy S26 FE",
+      "url": "https://www.gsmarena.com/samsung_galaxy_s26_fe_5g-14870.php",
+      "path": "data\\pages\\samsung_galaxy_s26_fe_5g-14870.html",
+      "sha256": "835fe42437d63d3b5507f370d9eb12042da06bd367970911df259ab47d13f7f9",
+      "bytes": 47212,
+      "from_cache": false
+    },
+    {
+      "slug": "samsung_galaxy_s26_ultra_5g-14320",
+      "short_name": "Galaxy S26 Ultra",
+      "url": "https://www.gsmarena.com/samsung_galaxy_s26_ultra_5g-14320.php",
+      "path": "data\\pages\\samsung_galaxy_s26_ultra_5g-14320.html",
+      "sha256": "312fdf7af18bd55f8c08dc00cd18e4641df9584bcd54bff193e0348f47836e00",
+      "bytes": 58085,
+      "from_cache": false
+    },
+    {
+      "slug": "samsung_galaxy_a57_5g-14379",
+      "short_name": "Galaxy A57",
+      "url": "https://www.gsmarena.com/samsung_galaxy_a57_5g-14379.php",
+      "path": "data\\pages\\samsung_galaxy_a57_5g-14379.html",
+      "sha256": "81b4aacf37695246767c55c9f3ffdca31692f7b53466809792c822b6938f55ca",
+      "bytes": 54662,
+      "from_cache": false
+    },
+    {
+      "slug": "samsung_galaxy_a17_5g-14041",
+      "short_name": "Galaxy A17",
+      "url": "https://www.gsmarena.com/samsung_galaxy_a17_5g-14041.php",
+      "path": "data\\pages\\samsung_galaxy_a17_5g-14041.html",
+      "sha256": "0af744b388be7776766018f20862c266f18cd51510455e170288d60eb506cfb1",
+      "bytes": 52899,
+      "from_cache": false
+    },
+    {
+      "slug": "samsung_galaxy_s26_5g-14456",
+      "short_name": "Galaxy S26",
+      "url": "https://www.gsmarena.com/samsung_galaxy_s26_5g-14456.php",
+      "path": "data\\pages\\samsung_galaxy_s26_5g-14456.html",
+      "sha256": "6909349d493e0d83b0bd30601426b2fbb1809db989fbcef54c2b39a056cc1a88",
+      "bytes": 54431,
+      "from_cache": false
+    },
+    {
+      "slug": "samsung_galaxy_a07-14066",
+      "short_name": "Galaxy A07 4G",
+      "url": "https://www.gsmarena.com/samsung_galaxy_a07-14066.php",
+      "path": "data\\pages\\samsung_galaxy_a07-14066.html",
+      "sha256": "d318ee216535db85148d638b64ebf53e6d0604f17ca6e4bacb2100a4ba7a8e50",
+      "bytes": 47866,
+      "from_cache": false
+    },
+    {
+      "slug": "samsung_galaxy_s25_ultra-13322",
+      "short_name": "Galaxy S25 Ultra",
+      "url": "https://www.gsmarena.com/samsung_galaxy_s25_ultra-13322.php",
+      "path": "data\\pages\\samsung_galaxy_s25_ultra-13322.html",
+      "sha256": "c15e8d428af0ef9c02c6fad52ba860c0ae8494fb9f6ba19d14f7145265c26b3f",
+      "bytes": 57482,
+      "from_cache": false
+    },
+    {
+      "slug": "samsung_galaxy_s25_fe_5g-14042",
+      "short_name": "Galaxy S25 FE",
+      "url": "https://www.gsmarena.com/samsung_galaxy_s25_fe_5g-14042.php",
+      "path": "data\\pages\\samsung_galaxy_s25_fe_5g-14042.html",
+      "sha256": "5e0381a1d88604ff90c4c6fd3062b403e80a9a67bbab6daea31bcc34278bdf8c",
+      "bytes": 55892,
+      "from_cache": false
+    },
+    {
+      "slug": "samsung_galaxy_a56-13603",
+      "short_name": "Galaxy A56",
+      "url": "https://www.gsmarena.com/samsung_galaxy_a56-13603.php",
+      "path": "data\\pages\\samsung_galaxy_a56-13603.html",
+      "sha256": "8229a62033b5925a9557aa5f89561b3e82c5ad4a07e28bae9f8797b63713ef37",
+      "bytes": 54097,
+      "from_cache": false
+    },
+    {
+      "slug": "samsung_galaxy_a37_5g-14378",
+      "short_name": "Galaxy A37",
+      "url": "https://www.gsmarena.com/samsung_galaxy_a37_5g-14378.php",
+      "path": "data\\pages\\samsung_galaxy_a37_5g-14378.html",
+      "sha256": "ec700df4fb85758e3fdabec8b02f5fa143a133bdfbb2d31b26134e301244d419",
+      "bytes": 54279,
+      "from_cache": false
+    },
+    {
+      "slug": "samsung_galaxy_a27_5g-14606",
+      "short_name": "Galaxy A27",
+      "url": "https://www.gsmarena.com/samsung_galaxy_a27_5g-14606.php",
+      "path": "data\\pages\\samsung_galaxy_a27_5g-14606.html",
+      "sha256": "b5cdf95652ba0ea866bb5c2de961d9f929feb00a1f5a50fd74c9dc2b341aaca5",
+      "bytes": 50018,
+      "from_cache": false
+    },
+    {
+      "slug": "samsung_galaxy_s24_ultra-12771",
+      "short_name": "Galaxy S24 Ultra",
+      "url": "https://www.gsmarena.com/samsung_galaxy_s24_ultra-12771.php",
+      "path": "data\\pages\\samsung_galaxy_s24_ultra-12771.html",
+      "sha256": "1ee44564367ad8c7cff0813333782ffe8c5a732cb9254c71debd0bdffc761ce9",
+      "bytes": 56958,
+      "from_cache": false
+    },
+    {
+      "slug": "samsung_galaxy_s25-13610",
+      "short_name": "Galaxy S25",
+      "url": "https://www.gsmarena.com/samsung_galaxy_s25-13610.php",
+      "path": "data\\pages\\samsung_galaxy_s25-13610.html",
+      "sha256": "eceae7d2b33e9b04e42ee44d8a7b4a57ec1a97f4fcadc714caddec22024f46d8",
+      "bytes": 56868,
+      "from_cache": false
+    },
+    {
+      "slug": "samsung_galaxy_s23_ultra-12024",
+      "short_name": "Galaxy S23 Ultra",
+      "url": "https://www.gsmarena.com/samsung_galaxy_s23_ultra-12024.php",
+      "path": "data\\pages\\samsung_galaxy_s23_ultra-12024.html",
+      "sha256": "c231e6bfbf114ef3ea8548a671165d5deb6d0a92a798dc9a333fe377f7ef0447",
+      "bytes": 58104,
+      "from_cache": false
+    },
+    {
+      "slug": "samsung_galaxy_z_fold_wide_5g-14673",
+      "short_name": "Galaxy Z Fold8",
+      "url": "https://www.gsmarena.com/samsung_galaxy_z_fold_wide_5g-14673.php",
+      "path": "data\\pages\\samsung_galaxy_z_fold_wide_5g-14673.html",
+      "sha256": "f71f39243125962250de012f67bd43cfc01b49848ca8e861a064e2bc975a56bc",
+      "bytes": 54694,
+      "from_cache": false
+    },
+    {
+      "slug": "samsung_galaxy_s23-12082",
+      "short_name": "Galaxy S23",
+      "url": "https://www.gsmarena.com/samsung_galaxy_s23-12082.php",
+      "path": "data\\pages\\samsung_galaxy_s23-12082.html",
+      "sha256": "d1a36a40c59e3b571acb26a13a5fd3022f7cb2cc0c3223aa8c9cc1edee5658b5",
+      "bytes": 54929,
+      "from_cache": false
+    },
+    {
+      "slug": "samsung_galaxy_s24-12773",
+      "short_name": "Galaxy S24",
+      "url": "https://www.gsmarena.com/samsung_galaxy_s24-12773.php",
+      "path": "data\\pages\\samsung_galaxy_s24-12773.html",
+      "sha256": "1761c2a9ba2e6d740f54285752a0f6bacf5a7cb68b879ea4db9f3ea5fb0a3cbe",
+      "bytes": 55678,
+      "from_cache": false
+    },
+    {
+      "slug": "samsung_galaxy_s22_ultra_5g-11251",
+      "short_name": "Galaxy S22 Ultra 5G",
+      "url": "https://www.gsmarena.com/samsung_galaxy_s22_ultra_5g-11251.php",
+      "path": "data\\pages\\samsung_galaxy_s22_ultra_5g-11251.html",
+      "sha256": "98b5d114b8b0ab7f256b1ab42e9ae4c90c882eaf29b5563991bb0b8dfb4c9aa3",
+      "bytes": 55825,
+      "from_cache": false
+    },
+    {
+      "slug": "samsung_galaxy_z_fold8_ultra_5g-14802",
+      "short_name": "Galaxy Z Fold8 Ultra",
+      "url": "https://www.gsmarena.com/samsung_galaxy_z_fold8_ultra_5g-14802.php",
+      "path": "data\\pages\\samsung_galaxy_z_fold8_ultra_5g-14802.html",
+      "sha256": "2d3967dbaaf11996309bdbc556936764231420b49902aa770dccd4f3fd319788",
+      "bytes": 54385,
+      "from_cache": false
+    },
+    {
+      "slug": "samsung_galaxy_s22_5g-11253",
+      "short_name": "Galaxy S22 5G",
+      "url": "https://www.gsmarena.com/samsung_galaxy_s22_5g-11253.php",
+      "path": "data\\pages\\samsung_galaxy_s22_5g-11253.html",
+      "sha256": "7a91a85d3af9801cde3d34c1c5d1bc7bf996bd6bc258f6662c0c1017d10176e9",
+      "bytes": 52076,
+      "from_cache": false
+    },
+    {
+      "slug": "samsung_galaxy_s26+_5g-14457",
+      "short_name": "Galaxy S26+",
+      "url": "https://www.gsmarena.com/samsung_galaxy_s26+_5g-14457.php",
+      "path": "data\\pages\\samsung_galaxy_s26+_5g-14457.html",
+      "sha256": "d1340240aed33e3ad27e4df787292983f8a6204894622361a3f34e62cedbd9f5",
+      "bytes": 54936,
+      "from_cache": false
+    },
+    {
+      "slug": "samsung_galaxy_s21_5g-10626",
+      "short_name": "Galaxy S21 5G",
+      "url": "https://www.gsmarena.com/samsung_galaxy_s21_5g-10626.php",
+      "path": "data\\pages\\samsung_galaxy_s21_5g-10626.html",
+      "sha256": "6a0aa17253849e0205086b85a7aee16a866b6afb3e7f3e86fa880cfa288c6c75",
+      "bytes": 52121,
+      "from_cache": false
+    }
+  ],
+  "failures": [
+    {
+      "slug": "samsung_galaxy_s21_ultra_5g-10596",
+      "error": "could not fetch https://www.gsmarena.com/samsung_galaxy_s21_ultra_5g-10596.php: HTTP 429, 113 bytes"
+    },
+    {
+      "slug": "samsung_galaxy_s25_edge-13506",
+      "error": "could not fetch https://www.gsmarena.com/samsung_galaxy_s25_edge-13506.php: HTTP 429, 113 bytes"
+    },
+    {
+      "slug": "samsung_galaxy_note20_ultra_5g-10261",
+      "error": "could not fetch https://www.gsmarena.com/samsung_galaxy_note20_ultra_5g-10261.php: HTTP 429, 113 bytes"
+    },
+    {
+      "slug": "samsung_galaxy_s25+-13609",
+      "error": "could not fetch https://www.gsmarena.com/samsung_galaxy_s25+-13609.php: HTTP 429, 113 bytes"
+    },
+    {
+      "slug": "samsung_galaxy_z_flip8_5g-14803",
+      "error": "could not fetch https://www.gsmarena.com/samsung_galaxy_z_flip8_5g-14803.php: HTTP 429, 113 bytes"
+    },
+    {
+      "slug": "samsung_galaxy_z_fold7-13826",
+      "error": "could not fetch https://www.gsmarena.com/samsung_galaxy_z_fold7-13826.php: HTTP 429, 113 bytes"
+    },
+    {
+      "slug": "samsung_galaxy_note10+-9732",
+      "error": "could not fetch https://www.gsmarena.com/samsung_galaxy_note10+-9732.php: HTTP 429, 113 bytes"
+    },
+    {
+      "slug": "samsung_galaxy_z_flip7-13712",
+      "error": "could not fetch https://www.gsmarena.com/samsung_galaxy_z_flip7-13712.php: HTTP 429, 113 bytes"
+    }
+  ]
+}

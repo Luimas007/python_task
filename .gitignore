@@ -1,6 +1,10 @@
-.env
 __pycache__/
-*.pyc
-data/chroma_store/
-logs/*.log
+*.py[cod]
+.env
+venv/
 .venv/
+logs/*.log
+data/pages/*.html
+data/raw/*.html
+.pytest_cache/
+*.egg-info/

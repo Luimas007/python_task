@@ -1,182 +1,480 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
-<meta charset="UTF-8">
-<title>Samsung Phone Assistant</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Samsung Phone Intelligence Console</title>
 <style>
-  :root { --bg:#0f1115; --panel:#171a21; --border:#2a2e38; --accent:#4f8cff; --text:#e6e8ec; --muted:#8a8f9c; }
-  * { box-sizing: border-box; }
-  body { margin:0; font-family: -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--text); }
-  header { padding:16px 24px; border-bottom:1px solid var(--border); }
-  header h1 { margin:0; font-size:18px; }
-  .tabs { display:flex; gap:8px; padding:12px 24px 0; }
-  .tab-btn { background:none; border:none; color:var(--muted); padding:8px 14px; cursor:pointer; font-size:14px; border-bottom:2px solid transparent; }
-  .tab-btn.active { color:var(--text); border-color:var(--accent); }
-  .panel { display:none; padding:20px 24px; max-width:800px; margin:0 auto; }
-  .panel.active { display:block; }
+  :root{
+    --bg:#0b0f17; --panel:#111827; --panel-2:#0f1724; --line:#1f2937;
+    --txt:#e5e7eb; --muted:#94a3b8; --dim:#64748b;
+    --accent:#38bdf8; --ok:#22c55e; --warn:#f59e0b; --err:#ef4444;
+    --pg:#0ea5e9; --acp:#a855f7; --llm:#f59e0b; --vec:#14b8a6; --ws:#64748b;
+    --mono:ui-monospace,"JetBrains Mono","Cascadia Code",Consolas,monospace;
+    --sans:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.5 var(--sans);overflow:hidden}
 
-  #chat-log { display:flex; flex-direction:column; gap:10px; margin-bottom:14px; min-height:300px; }
-  .msg { padding:10px 14px; border-radius:10px; max-width:80%; white-space:pre-wrap; line-height:1.4; }
-  .msg.user { align-self:flex-end; background:var(--accent); color:#fff; }
-  .msg.assistant { align-self:flex-start; background:var(--panel); border:1px solid var(--border); }
-  .msg.meta { font-size:12px; color:var(--muted); margin-top:4px; }
+  /* ---------- shell ---------- */
+  .app{display:grid;grid-template-rows:auto 1fr;height:100vh}
+  header{display:flex;align-items:center;gap:16px;padding:10px 18px;
+    background:linear-gradient(180deg,#0f1724,#0b0f17);border-bottom:1px solid var(--line)}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:650;letter-spacing:.2px}
+  .brand .dot{width:9px;height:9px;border-radius:50%;background:var(--accent);
+    box-shadow:0 0 12px var(--accent)}
+  .brand small{display:block;font-weight:400;font-size:11px;color:var(--muted);letter-spacing:.3px}
+  .pills{display:flex;gap:8px;margin-left:auto;flex-wrap:wrap}
+  .pill{display:flex;align-items:center;gap:6px;padding:4px 10px;border:1px solid var(--line);
+    border-radius:999px;background:var(--panel);font-size:11px;color:var(--muted);white-space:nowrap}
+  .pill b{color:var(--txt);font-weight:600}
+  .led{width:7px;height:7px;border-radius:50%;background:var(--dim)}
+  .led.on{background:var(--ok);box-shadow:0 0 8px var(--ok)}
+  .led.off{background:var(--err);box-shadow:0 0 8px var(--err)}
 
-  .chat-input-row { display:flex; gap:8px; }
-  input[type=text] { flex:1; padding:10px 12px; background:var(--panel); border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:14px; }
-  button { padding:10px 16px; border-radius:8px; border:1px solid var(--border); background:var(--accent); color:#fff; cursor:pointer; font-size:14px; }
-  button.secondary { background:var(--panel); color:var(--text); }
-  button:disabled { opacity:0.5; cursor:not-allowed; }
+  main{display:grid;grid-template-columns:minmax(340px,1.05fr) minmax(420px,1.25fr) minmax(340px,1fr);
+    gap:12px;padding:12px;overflow:hidden}
+  .col{display:flex;flex-direction:column;gap:12px;min-height:0;overflow:hidden}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    display:flex;flex-direction:column;min-height:0;overflow:hidden}
+  .card > h2{margin:0;padding:10px 14px;font-size:11px;font-weight:650;letter-spacing:.9px;
+    text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--line);
+    display:flex;align-items:center;gap:8px;background:var(--panel-2)}
+  .card > h2 .count{margin-left:auto;font-weight:500;color:var(--dim);letter-spacing:0;
+    text-transform:none;font-size:11px}
+  .body{padding:12px 14px;overflow-y:auto;min-height:0}
+  .grow{flex:1;min-height:0}
 
-  select { width:100%; padding:10px; background:var(--panel); border:1px solid var(--border); border-radius:8px; color:var(--text); margin-bottom:14px; }
-  pre { background:var(--panel); border:1px solid var(--border); padding:14px; border-radius:8px; white-space:pre-wrap; font-size:13px; }
-  .row { display:flex; gap:8px; margin-top:10px; }
-  .loading { color:var(--muted); font-size:13px; }
+  /* ---------- chat ---------- */
+  #chat{display:flex;flex-direction:column;gap:12px}
+  .msg{max-width:94%;padding:10px 13px;border-radius:11px;white-space:pre-wrap;
+    word-break:break-word;font-size:13.5px;line-height:1.62}
+  .msg.user{align-self:flex-end;background:#1e3a5f;border:1px solid #2b5580}
+  .msg.bot{align-self:flex-start;background:var(--panel-2);border:1px solid var(--line)}
+  .msg.sys{align-self:center;background:transparent;border:1px dashed var(--line);
+    color:var(--muted);font-size:12px;text-align:center;max-width:100%}
+  .meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px;padding-top:8px;
+    border-top:1px solid var(--line)}
+  .tag{font-size:10.5px;padding:2px 7px;border-radius:5px;background:#0b1220;
+    border:1px solid var(--line);color:var(--muted);font-family:var(--mono)}
+  .tag.ok{color:var(--ok);border-color:#14532d}
+  .tag.warn{color:var(--warn);border-color:#78350f}
+  .tag.err{color:var(--err);border-color:#7f1d1d}
+  .composer{display:flex;gap:8px;padding:10px;border-top:1px solid var(--line);background:var(--panel-2)}
+  .composer input{flex:1;background:#0b1220;border:1px solid var(--line);border-radius:9px;
+    padding:10px 12px;color:var(--txt);font:14px var(--sans);outline:none}
+  .composer input:focus{border-color:var(--accent)}
+  .composer button{background:var(--accent);color:#062033;border:0;border-radius:9px;
+    padding:0 18px;font-weight:650;cursor:pointer;font-size:13px}
+  .composer button:disabled{opacity:.45;cursor:not-allowed}
+  .samples{display:flex;flex-wrap:wrap;gap:6px;padding:0 10px 10px;background:var(--panel-2)}
+  .samples button{background:#0b1220;border:1px solid var(--line);color:var(--muted);
+    border-radius:7px;padding:5px 9px;font-size:11.5px;cursor:pointer}
+  .samples button:hover{border-color:var(--accent);color:var(--txt)}
+
+  /* ---------- agents ---------- */
+  .agents{display:grid;grid-template-columns:1fr 1fr;gap:9px;padding:12px}
+  .agent{position:relative;border:1px solid var(--line);border-radius:10px;padding:9px 10px;
+    background:var(--panel-2);transition:border-color .18s,box-shadow .18s,transform .18s}
+  .agent .nm{display:flex;align-items:center;gap:7px;font-weight:650;font-size:12.5px;
+    font-family:var(--mono);letter-spacing:.4px}
+  .agent .swatch{width:8px;height:8px;border-radius:2px;flex:none}
+  .agent .role{font-size:10.5px;color:var(--dim);margin-top:3px}
+  .agent .state{position:absolute;top:8px;right:9px;font-size:9px;font-family:var(--mono);
+    color:var(--dim);letter-spacing:.5px}
+  .agent.active{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent),0 0 22px rgba(56,189,248,.28);
+    transform:translateY(-1px)}
+  .agent.active .state{color:var(--accent)}
+  .agent.done{border-color:#14532d}
+  .agent.done .state{color:var(--ok)}
+  .agent.error{border-color:#7f1d1d}
+  .agent.error .state{color:var(--err)}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+  .agent.active .nm .swatch{animation:pulse 1s infinite}
+
+  /* ---------- flow ---------- */
+  #flow{padding:10px 12px;display:flex;flex-direction:column;gap:5px;font-family:var(--mono);font-size:11.5px}
+  .hop{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;
+    padding:5px 8px;border-radius:7px;background:var(--panel-2);border-left:2px solid var(--acp);
+    animation:slide .22s ease}
+  @keyframes slide{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:none}}
+  .hop .who{color:var(--txt);white-space:nowrap}
+  .hop .arrow{color:var(--acp)}
+  .hop .what{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .hop .ms{color:var(--dim);font-size:10.5px}
+
+  /* ---------- protocol log ---------- */
+  #proto{padding:8px 10px;font-family:var(--mono);font-size:11px;display:flex;
+    flex-direction:column;gap:4px}
+  .frame{border-left:2px solid var(--line);padding:5px 9px;border-radius:0 7px 7px 0;
+    background:var(--panel-2);animation:slide .2s ease}
+  .frame .top{display:flex;gap:8px;align-items:center}
+  .frame .pr{font-size:9.5px;padding:1px 6px;border-radius:4px;font-weight:600;flex:none}
+  .frame .txt{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+  .frame .ms{color:var(--dim);font-size:10px;flex:none}
+  .frame .sql{margin-top:4px;color:#7dd3fc;font-size:10.5px;white-space:pre-wrap;
+    word-break:break-all;max-height:78px;overflow:hidden;line-height:1.45}
+  .frame.pg{border-left-color:var(--pg)}   .frame.pg .pr{background:#082f49;color:#7dd3fc}
+  .frame.vec{border-left-color:var(--vec)} .frame.vec .pr{background:#042f2e;color:#5eead4}
+  .frame.acp{border-left-color:var(--acp)} .frame.acp .pr{background:#2e1065;color:#d8b4fe}
+  .frame.llm{border-left-color:var(--llm)} .frame.llm .pr{background:#451a03;color:#fcd34d}
+  .frame.sys{border-left-color:var(--ws)}  .frame.sys .pr{background:#1e293b;color:#cbd5e1}
+  .frame.err{border-left-color:var(--err)} .frame.err .pr{background:#450a0a;color:#fca5a5}
+
+  /* ---------- misc ---------- */
+  .legend{display:flex;flex-wrap:wrap;gap:6px;padding:10px 12px;border-bottom:1px solid var(--line)}
+  .lg{display:flex;align-items:center;gap:5px;font-size:10.5px;color:var(--muted);
+    font-family:var(--mono)}
+  .lg i{width:9px;height:9px;border-radius:2px;display:inline-block}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th,td{text-align:left;padding:5px 7px;border-bottom:1px solid var(--line)}
+  th{color:var(--dim);font-weight:600;font-size:10.5px;text-transform:uppercase;letter-spacing:.5px}
+  td.num{text-align:right;font-family:var(--mono)}
+  .null{color:var(--dim);font-style:italic;font-size:11px}
+  .stat{display:flex;justify-content:space-between;padding:4px 0;font-size:12px;
+    border-bottom:1px dashed var(--line)}
+  .stat span:last-child{font-family:var(--mono);color:var(--accent)}
+  .empty{color:var(--dim);font-size:12px;padding:14px;text-align:center}
+  ::-webkit-scrollbar{width:9px;height:9px}
+  ::-webkit-scrollbar-thumb{background:#1f2937;border-radius:6px}
+  ::-webkit-scrollbar-track{background:transparent}
+  @media(max-width:1250px){main{grid-template-columns:1fr;overflow-y:auto}
+    body{overflow:auto}.app{height:auto}}
 </style>
 </head>
 <body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <span class="dot"></span>
+      <div>Samsung Phone Intelligence
+        <small>multi-agent retrieval over a local PostgreSQL knowledge base</small></div>
+    </div>
+    <div class="pills">
+      <div class="pill"><span class="led" id="led-db"></span>PostgreSQL <b id="v-db">-</b></div>
+      <div class="pill"><span class="led" id="led-llm"></span>LLM <b id="v-llm">-</b></div>
+      <div class="pill"><span class="led" id="led-ws"></span>Trace <b id="v-ws">-</b></div>
+      <div class="pill">Devices <b id="v-phones">-</b></div>
+      <div class="pill">Chunks <b id="v-chunks">-</b></div>
+    </div>
+  </header>
 
-<header><h1>Samsung Galaxy Phone Assistant</h1></header>
+  <main>
+    <!-- ============ left ============ -->
+    <div class="col">
+      <div class="card grow">
+        <h2>Conversation <span class="count" id="c-intent"></span></h2>
+        <div class="body grow" id="chat"></div>
+        <div class="samples" id="samples"></div>
+        <form class="composer" id="form">
+          <input id="q" autocomplete="off" placeholder="Ask about any Samsung phone in the database...">
+          <button id="send" type="submit">Ask</button>
+        </form>
+      </div>
+    </div>
 
-<div class="tabs">
-  <button class="tab-btn active" data-tab="chat">Chat</button>
-  <button class="tab-btn" data-tab="browse">Browse Phones</button>
+    <!-- ============ middle ============ -->
+    <div class="col">
+      <div class="card">
+        <h2>Agent Roster <span class="count" id="c-agents"></span></h2>
+        <div class="agents" id="agents"></div>
+      </div>
+      <div class="card grow">
+        <h2>Agent Communication Flow <span class="count">ACP/1.0</span></h2>
+        <div class="body grow" id="flow"><div class="empty">Ask a question to see agents exchange messages.</div></div>
+      </div>
+    </div>
+
+    <!-- ============ right ============ -->
+    <div class="col">
+      <div class="card grow">
+        <h2>Protocol Trace <span class="count" id="c-frames">0 frames</span></h2>
+        <div class="legend" id="legend"></div>
+        <div class="body grow" id="proto"><div class="empty">Waiting for traffic...</div></div>
+      </div>
+      <div class="card" style="max-height:38%">
+        <h2>Knowledge Base <span class="count" id="c-kb"></span></h2>
+        <div class="body" id="kb"></div>
+      </div>
+    </div>
+  </main>
 </div>
 
-<section id="chat" class="panel active">
-  <div id="chat-log"></div>
-  <div class="chat-input-row">
-    <input type="text" id="chat-input" placeholder="Ask about specs, reviews, or comparisons..." autocomplete="off">
-    <button id="chat-send">Send</button>
-  </div>
-</section>
-
-<section id="browse" class="panel">
-  <select id="phone-select"></select>
-  <pre id="phone-specs">Select a phone to view its specifications.</pre>
-  <div class="row">
-    <button id="gen-review">Generate review</button>
-    <button id="download-review" class="secondary" disabled>Download review</button>
-  </div>
-  <pre id="review-output" style="display:none;"></pre>
-</section>
-
 <script>
-const API = "/api";
+"use strict";
+const $ = s => document.querySelector(s);
+const el = (t,c,x) => { const n=document.createElement(t); if(c)n.className=c; if(x!==undefined)n.textContent=x; return n; };
 
-document.querySelectorAll(".tab-btn").forEach(btn => {
-  btn.onclick = () => {
-    document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
-    document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
-    btn.classList.add("active");
-    document.getElementById(btn.dataset.tab).classList.add("active");
+const SAMPLES = [
+  "What are the camera specs of the Samsung Galaxy S23?",
+  "Which Samsung phone has the best battery life?",
+  "How does the Galaxy S23 compare to the S22 in terms of performance?",
+  "Write a review of the Galaxy Z Fold8",
+  "What is the screen size of the Galaxy S22?",
+  "Which phone is the lightest?"
+];
+
+const PROTO_CLASS = {
+  "PG-WIRE/3.0":"pg", "VEC-SQL/1.0":"vec", "ACP/1.0":"acp",
+  "OLLAMA-HTTP/1.1":"llm", "WS-TRACE/1.0":"sys"
+};
+const PROTO_SHORT = {
+  "PG-WIRE/3.0":"PG-WIRE", "VEC-SQL/1.0":"VEC-SQL", "ACP/1.0":"ACP",
+  "OLLAMA-HTTP/1.1":"OLLAMA", "WS-TRACE/1.0":"WS"
+};
+
+let AGENTS = [], frameCount = 0, busy = false;
+
+/* ------------------------------------------------------------ bootstrap */
+async function boot(){
+  $("#samples").append(...SAMPLES.map(s=>{
+    const b = el("button",null,s.length>44 ? s.slice(0,42)+"..." : s);
+    b.title = s;
+    b.onclick = () => { $("#q").value = s; $("#form").requestSubmit(); };
+    return b;
+  }));
+
+  try{
+    const p = await (await fetch("/api/protocols")).json();
+    $("#legend").append(...p.protocols.map(pr=>{
+      const d = el("div","lg"); const i = el("i");
+      i.style.background = `var(--${PROTO_CLASS[pr.id]||"ws"})`;
+      d.append(i, el("span",null,PROTO_SHORT[pr.id]||pr.id));
+      d.title = `${pr.label}\n${pr.transport}\n${pr.description}`;
+      return d;
+    }));
+  }catch(e){}
+
+  try{
+    const a = await (await fetch("/api/agents")).json();
+    AGENTS = a.agents;
+    $("#c-agents").textContent = `${AGENTS.length} specialists`;
+    renderAgents();
+  }catch(e){}
+
+  await refreshHealth();
+  await refreshKB();
+  connectTrace();
+  sysMsg("Console ready. Every answer below is assembled from PostgreSQL rows only.");
+}
+
+function renderAgents(){
+  const box = $("#agents"); box.innerHTML = "";
+  AGENTS.forEach(a=>{
+    const d = el("div","agent"); d.id = "ag-" + a.name;
+    d.title = `${a.role}\n${a.summary}\n\nCapabilities: ${a.capabilities.join(", ")}\nProtocols: ${a.protocols.join(", ")}`;
+    const nm = el("div","nm");
+    const sw = el("span","swatch"); sw.style.background = a.accent;
+    nm.append(sw, el("span",null,a.name));
+    d.append(nm, el("div","role",a.role), el("div","state","idle"));
+    box.append(d);
+  });
+}
+
+function setAgent(name, state){
+  const n = document.getElementById("ag-"+name);
+  if(!n) return;
+  n.classList.remove("active","done","error");
+  if(state) n.classList.add(state);
+  n.querySelector(".state").textContent =
+    state==="active" ? "working" : state==="done" ? "done" : state==="error" ? "error" : "idle";
+}
+function resetAgents(){ AGENTS.forEach(a=>setAgent(a.name,null)); }
+
+/* ------------------------------------------------------------- health */
+async function refreshHealth(){
+  try{
+    const h = await (await fetch("/api/health")).json();
+    $("#led-db").className = "led " + (h.database.ok ? "on" : "off");
+    $("#v-db").textContent = h.database.ok ? (h.database.database||"connected") : "down";
+    $("#led-llm").className = "led " + (h.llm.ok ? "on" : "off");
+    $("#v-llm").textContent = h.llm.model || "-";
+    $("#v-phones").textContent = h.corpus.phones ?? "-";
+    $("#v-chunks").textContent = h.corpus.chunks ?? "-";
+  }catch(e){
+    $("#led-db").className = "led off";
+  }
+}
+
+async function refreshKB(){
+  try{
+    const h  = await (await fetch("/api/health")).json();
+    const c  = h.corpus, box = $("#kb"); box.innerHTML = "";
+    const rows = [
+      ["Devices loaded", c.phones],
+      ["Flagship models", c.flagships],
+      ["Specification rows", c.spec_rows],
+      ["Fields stored as NULL", c.spec_nulls],
+      ["Retrieval chunks", c.chunks],
+      ["Chunks embedded", c.embedded],
+      ["Embedding model", h.embedding.model.split("/").pop()],
+      ["Vector dimensions", h.embedding.dim],
+    ];
+    rows.forEach(([k,v])=>{
+      const d = el("div","stat"); d.append(el("span",null,k), el("span",null,String(v ?? "-")));
+      box.append(d);
+    });
+    $("#c-kb").textContent = c.last_scraped ? ("scraped " + String(c.last_scraped).slice(0,10)) : "";
+  }catch(e){}
+}
+
+/* -------------------------------------------------------- trace socket */
+function connectTrace(){
+  const url = (location.protocol==="https:"?"wss://":"ws://") + location.host + "/ws/trace";
+  const ws = new WebSocket(url);
+  ws.onopen = () => { $("#led-ws").className="led on"; $("#v-ws").textContent="live"; };
+  ws.onclose = () => {
+    $("#led-ws").className="led off"; $("#v-ws").textContent="reconnecting";
+    setTimeout(connectTrace, 2500);
   };
+  ws.onmessage = ev => {
+    const e = JSON.parse(ev.data);
+    if(e.type === "trace.ping") return;
+    if(e.type === "trace.hello"){ (e.history||[]).slice(-14).forEach(onEvent); return; }
+    onEvent(e);
+  };
+}
+
+function onEvent(e){
+  // --- agent lifecycle
+  if(e.type === "agent.start")  setAgent(e.agent, "active");
+  if(e.type === "agent.end")    setAgent(e.agent, "done");
+  if(e.type === "agent.error")  setAgent(e.agent, "error");
+  if(e.type === "run.start")    { resetAgents(); clearFlow(); }
+
+  // --- agent-to-agent hand-offs
+  if(e.type === "acp.message" && e.agent && e.target) addHop(e);
+  if(e.type === "agent.finding") addFinding(e);
+
+  // --- protocol frames
+  if(e.protocol || e.channel === "system") addFrame(e);
+}
+
+function clearFlow(){ $("#flow").innerHTML = ""; }
+
+function addHop(e){
+  const box = $("#flow");
+  if(box.querySelector(".empty")) box.innerHTML = "";
+  const d = el("div","hop");
+  d.append(
+    el("span","who", e.agent),
+    (()=>{ const s = el("span","what"); s.textContent = "-> " + (e.detail?.intent || e.summary); return s; })(),
+    el("span","ms", e.target)
+  );
+  d.querySelector(".what").prepend(el("span","arrow",""));
+  box.append(d); box.scrollTop = box.scrollHeight;
+}
+
+function addFinding(e){
+  const box = $("#flow");
+  if(box.querySelector(".empty")) box.innerHTML = "";
+  const d = el("div","hop");
+  d.style.borderLeftColor = "var(--ok)";
+  d.append(el("span","who", e.agent),
+           el("span","what", e.summary),
+           el("span","ms", ""));
+  box.append(d); box.scrollTop = box.scrollHeight;
+}
+
+function addFrame(e){
+  const box = $("#proto");
+  if(box.querySelector(".empty")) box.innerHTML = "";
+  const cls = e.status === "error" ? "err" : (PROTO_CLASS[e.protocol] || "sys");
+  const f = el("div","frame " + cls);
+
+  const top = el("div","top");
+  top.append(el("span","pr", PROTO_SHORT[e.protocol] || (e.channel==="system" ? "SYSTEM" : "TRACE")));
+  top.append(el("span","txt", e.summary));
+  if(e.duration_ms != null) top.append(el("span","ms", e.duration_ms.toFixed(0)+"ms"));
+  f.append(top);
+
+  const sql = e.detail?.sql;
+  if(sql) f.append(el("div","sql", sql.length>340 ? sql.slice(0,340)+" ..." : sql));
+  else if(e.detail?.endpoint && e.protocol === "OLLAMA-HTTP/1.1")
+    f.append(el("div","sql", `POST ${e.detail.endpoint}  model=${e.detail.model}`));
+
+  box.append(f);
+  while(box.children.length > 160) box.removeChild(box.firstChild);
+  box.scrollTop = box.scrollHeight;
+  $("#c-frames").textContent = (++frameCount) + " frames";
+}
+
+/* --------------------------------------------------------------- chat */
+function bubble(cls, text){
+  const d = el("div","msg "+cls, text);
+  $("#chat").append(d); $("#chat").scrollTop = 1e9;
+  return d;
+}
+function sysMsg(t){ bubble("sys", t); }
+
+$("#form").addEventListener("submit", async ev=>{
+  ev.preventDefault();
+  const q = $("#q").value.trim();
+  if(!q || busy) return;
+  busy = true; $("#send").disabled = true; $("#q").value = "";
+
+  bubble("user", q);
+  const pending = bubble("bot", "Dispatching agents...");
+
+  try{
+    const r = await fetch("/api/ask", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({question:q, session_key:"console"})
+    });
+    if(!r.ok) throw new Error("HTTP " + r.status);
+    const d = await r.json();
+
+    pending.textContent = d.answer || "(empty response)";
+    $("#c-intent").textContent = d.intent ? ("intent: " + d.intent) : "";
+
+    const m = el("div","meta");
+    m.append(el("span","tag", d.intent));
+    (d.pipeline||[]).length && m.append(el("span","tag", d.pipeline.join(" -> ")));
+    (d.devices||[]).forEach(x => m.append(el("span","tag", x)));
+    m.append(el("span","tag", Math.round(d.latency_ms) + " ms"));
+
+    if(d.grounding){
+      const g = d.grounding;
+      const cls = g.verdict === "grounded" ? "ok" : g.verdict === "partially-grounded" ? "warn" : "err";
+      const t = el("span","tag "+cls,
+        `${g.verdict}: ${g.supported}/${g.numeric_claims} figures traced to DB`);
+      t.title = g.unsupported?.length ? "Unverified: " + g.unsupported.join(", ") : "All figures matched database rows";
+      m.append(t);
+    }
+    (d.unresolved||[]).forEach(u => m.append(el("span","tag err", "not in DB: " + u)));
+    pending.append(m);
+
+    if(d.extras && d.extras.ranking) renderRanking(pending, d.extras.ranking);
+  }catch(err){
+    pending.textContent = "Request failed: " + err.message;
+  }finally{
+    busy = false; $("#send").disabled = false; $("#q").focus();
+    setTimeout(()=>AGENTS.forEach(a=>setAgent(a.name,null)), 2200);
+  }
 });
 
-// ---- Chat ----
-const chatLog = document.getElementById("chat-log");
-const chatInput = document.getElementById("chat-input");
-const chatSend = document.getElementById("chat-send");
-
-function addMessage(text, role, meta) {
-  const div = document.createElement("div");
-  div.className = "msg " + role;
-  div.textContent = text;
-  chatLog.appendChild(div);
-  if (meta) {
-    const m = document.createElement("div");
-    m.className = "meta";
-    m.textContent = meta;
-    chatLog.appendChild(m);
-  }
-  chatLog.scrollTop = chatLog.scrollHeight;
-  return div;
+function renderRanking(host, r){
+  const tbl = el("table");
+  const thead = el("thead");
+  const hr = el("tr");
+  ["#","Device", r.label + (r.unit ? ` (${r.unit})` : "")].forEach(h=>hr.append(el("th",null,h)));
+  thead.append(hr); tbl.append(thead);
+  const tb = el("tbody");
+  (r.rows||[]).forEach((row,i)=>{
+    const tr = el("tr");
+    tr.append(el("td",null,String(i+1)), el("td",null,row.model_name));
+    tr.append(el("td","num", row.metric_value == null ? "-" : String(row.metric_value)));
+    tb.append(tr);
+  });
+  tbl.append(tb);
+  const wrap = el("div"); wrap.style.marginTop = "10px"; wrap.append(tbl);
+  if(r.excluded_null_count)
+    wrap.append(el("div","null", `${r.excluded_null_count} device(s) excluded: value is NULL in the database.`));
+  host.append(wrap);
 }
 
-async function sendChat() {
-  const query = chatInput.value.trim();
-  if (!query) return;
-  chatInput.value = "";
-  chatSend.disabled = true;
-  addMessage(query, "user");
-  const loadingEl = addMessage("Thinking...", "assistant");
-
-  try {
-    const resp = await fetch(`${API}/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query })
-    });
-    const data = await resp.json();
-    loadingEl.textContent = data.answer;
-    if (data.phones && data.phones.length) {
-      const meta = document.createElement("div");
-      meta.className = "meta";
-      meta.textContent = "Referenced: " + data.phones.join(", ");
-      chatLog.appendChild(meta);
-    }
-  } catch (e) {
-    loadingEl.textContent = "Request failed. Is the API running?";
-  } finally {
-    chatSend.disabled = false;
-    chatInput.focus();
-  }
-}
-
-chatSend.onclick = sendChat;
-chatInput.addEventListener("keydown", e => { if (e.key === "Enter") sendChat(); });
-
-// ---- Browse ----
-const phoneSelect = document.getElementById("phone-select");
-const phoneSpecs = document.getElementById("phone-specs");
-const genReviewBtn = document.getElementById("gen-review");
-const downloadBtn = document.getElementById("download-review");
-const reviewOutput = document.getElementById("review-output");
-let phones = [];
-let currentReview = "";
-
-async function loadPhones() {
-  const resp = await fetch(`${API}/phones`);
-  phones = await resp.json();
-  phoneSelect.innerHTML = phones.map(p => `<option value="${p.id}">${p.name}</option>`).join("");
-  if (phones.length) showSpecs(phones[0].id);
-}
-
-function showSpecs(id) {
-  const phone = phones.find(p => p.id == id);
-  phoneSpecs.textContent = JSON.stringify(phone.specification, null, 2);
-  reviewOutput.style.display = "none";
-  downloadBtn.disabled = true;
-}
-
-phoneSelect.onchange = () => showSpecs(phoneSelect.value);
-
-genReviewBtn.onclick = async () => {
-  genReviewBtn.disabled = true;
-  reviewOutput.style.display = "block";
-  reviewOutput.textContent = "Generating...";
-  try {
-    const resp = await fetch(`${API}/phones/${phoneSelect.value}/review`, { method: "POST" });
-    const data = await resp.json();
-    currentReview = data.review;
-    reviewOutput.textContent = currentReview;
-    downloadBtn.disabled = false;
-  } catch (e) {
-    reviewOutput.textContent = "Failed to generate review.";
-  } finally {
-    genReviewBtn.disabled = false;
-  }
-};
-
-downloadBtn.onclick = () => {
-  const blob = new Blob([currentReview], { type: "text/plain" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  const name = phones.find(p => p.id == phoneSelect.value).name;
-  a.download = `${name.replace(/\s+/g, "_")}_review.txt`;
-  a.click();
-};
-
-loadPhones();
+boot();
 </script>
 </body>
 </html>
